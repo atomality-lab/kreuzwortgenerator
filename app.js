@@ -1,9 +1,9 @@
 'use strict';
 
-const VERSION = '0.3.0';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.3.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
-const DB_NAME = 'kreuzwortdrucker-db-v0-3';
+const VERSION = '0.3.1';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.3.1.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const DB_NAME = 'kreuzwortdrucker-db-v0-3-1';
 const DB_STORE = 'kv';
 
 const els = {
@@ -58,7 +58,8 @@ let currentPuzzle = null;
 let currentView = 'empty';
 let deferredInstallPrompt = null;
 let clueBank = {};
-let dictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [] };
+let importedDictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [] };
+let dictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [], builtInCount: 0, importedCount: 0, importSourceName: '' };
 let dictionaryIndex = new Map();
 
 function normalizeWord(raw) {
@@ -152,6 +153,33 @@ function analyzeDictionaryText(text, sourceName, minImportLength = 3) {
   };
 }
 
+function createBuiltInDictionaryState() {
+  const builtInWords = Array.isArray(window.KW_BUILTIN_DE_WORDS) ? window.KW_BUILTIN_DE_WORDS : [];
+  return analyzeDictionaryText(builtInWords.join('\n'), 'Eingebaute deutsche Basis-Wortliste', 3);
+}
+
+function refreshCombinedDictionary() {
+  const builtIn = createBuiltInDictionaryState();
+  const importedEntries = Array.isArray(importedDictionaryState.entries) ? importedDictionaryState.entries : [];
+  const combinedWords = [
+    ...(Array.isArray(window.KW_BUILTIN_DE_WORDS) ? window.KW_BUILTIN_DE_WORDS : []),
+    ...importedEntries.map((entry) => entry.original || entry.grid).filter(Boolean),
+  ];
+  const sourceName = importedEntries.length
+    ? `Eingebaute Basisliste + ${importedDictionaryState.sourceName || 'Zusatzliste'}`
+    : 'Eingebaute deutsche Basis-Wortliste';
+  dictionaryState = analyzeDictionaryText(combinedWords.join('\n'), sourceName, 3);
+  dictionaryState.builtInCount = builtIn.entries.length;
+  dictionaryState.importedCount = importedEntries.length;
+  dictionaryState.importSourceName = importedDictionaryState.sourceName || '';
+  dictionaryState.importedAt = importedDictionaryState.importedAt || null;
+  buildDictionaryIndex();
+}
+
+function hasImportedDictionary() {
+  return Boolean(importedDictionaryState.entries && importedDictionaryState.entries.length);
+}
+
 function buildDictionaryIndex() {
   dictionaryIndex = new Map();
   dictionaryState.entries.forEach((entry) => dictionaryIndex.set(entry.grid, entry));
@@ -181,7 +209,7 @@ async function saveDictionaryToDb() {
   if (!db) return;
   await new Promise((resolve, reject) => {
     const tx = db.transaction(DB_STORE, 'readwrite');
-    tx.objectStore(DB_STORE).put(dictionaryState, 'dictionary');
+    tx.objectStore(DB_STORE).put(importedDictionaryState, 'importedDictionary');
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -191,20 +219,33 @@ async function saveDictionaryToDb() {
 async function loadDictionaryFromDb() {
   try {
     const db = await openDictionaryDb();
-    if (!db) return;
+    if (!db) {
+      refreshCombinedDictionary();
+      return;
+    }
     const loaded = await new Promise((resolve, reject) => {
       const tx = db.transaction(DB_STORE, 'readonly');
-      const request = tx.objectStore(DB_STORE).get('dictionary');
-      request.onsuccess = () => resolve(request.result || null);
+      const store = tx.objectStore(DB_STORE);
+      const request = store.get('importedDictionary');
+      request.onsuccess = () => {
+        if (request.result) {
+          resolve(request.result);
+          return;
+        }
+        const legacy = store.get('dictionary');
+        legacy.onsuccess = () => resolve(legacy.result || null);
+        legacy.onerror = () => reject(legacy.error);
+      };
       request.onerror = () => reject(request.error);
     });
     db.close();
     if (loaded && Array.isArray(loaded.entries)) {
-      dictionaryState = loaded;
-      buildDictionaryIndex();
+      importedDictionaryState = loaded;
     }
+    refreshCombinedDictionary();
   } catch (error) {
     console.warn('Wörterbuch konnte nicht geladen werden:', error);
+    refreshCombinedDictionary();
   }
 }
 
@@ -214,13 +255,15 @@ async function clearDictionaryFromDb() {
     if (!db) return;
     await new Promise((resolve, reject) => {
       const tx = db.transaction(DB_STORE, 'readwrite');
-      tx.objectStore(DB_STORE).delete('dictionary');
+      const store = tx.objectStore(DB_STORE);
+      store.delete('importedDictionary');
+      store.delete('dictionary');
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
     db.close();
   } catch (error) {
-    console.warn('Wörterbuch konnte nicht gelöscht werden:', error);
+    console.warn('Zusatzwörterbuch konnte nicht gelöscht werden:', error);
   }
 }
 
@@ -232,21 +275,23 @@ function updateDictionaryUi() {
   if (!els.dictionaryStatus) return;
   const enabled = hasDictionary();
   els.fillFromDictionary.disabled = !enabled;
-  els.clearDictionary.disabled = !enabled;
+  els.clearDictionary.disabled = !hasImportedDictionary();
   els.dictionarySearch.disabled = !enabled;
   if (!enabled) {
-    els.dictionaryStatus.textContent = 'Noch kein Wörterbuch importiert.';
-    els.dictionaryResults.textContent = 'Nach dem Import kannst Du hier Wörter suchen.';
+    els.dictionaryStatus.textContent = 'Die eingebaute Wortliste konnte nicht geladen werden.';
+    els.dictionaryResults.textContent = 'Keine Wörter verfügbar.';
     els.dictionaryResults.classList.add('empty-clue-list');
     return;
   }
   const stats = dictionaryState.stats || {};
-  const date = dictionaryState.importedAt ? new Date(dictionaryState.importedAt).toLocaleString('de-DE') : 'unbekannt';
+  const importedInfo = hasImportedDictionary()
+    ? `<br><span class="word-meta">Zusatzliste: ${escapeHtml(dictionaryState.importSourceName)} · ${formatNumber(dictionaryState.importedCount)} importierte Einträge</span>`
+    : '<br><span class="word-meta">Keine Zusatzliste importiert. Du kannst fremdsprachige oder eigene Wörter zusätzlich laden.</span>';
   const ambiguous = stats.ambiguousGridForms ? ` · ${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen erkannt` : '';
   els.dictionaryStatus.innerHTML = `
     <strong>${escapeHtml(dictionaryState.sourceName)}</strong><br>
-    ${formatNumber(stats.usable)} nutzbare Wörter importiert · ${formatNumber(stats.tooShort)} sehr kurze Wörter ausgeschlossen · ${formatNumber(stats.duplicateLines)} Dubletten übersprungen${escapeHtml(ambiguous)}<br>
-    <span class="word-meta">Import: ${escapeHtml(date)} · interne Suche aktiv</span>`;
+    ${formatNumber(stats.usable)} nutzbare Wörter verfügbar · davon ${formatNumber(dictionaryState.builtInCount)} eingebaut · ${formatNumber(stats.tooShort)} sehr kurze Wörter ausgeschlossen${escapeHtml(ambiguous)}
+    ${importedInfo}`;
   renderDictionaryResults();
 }
 
@@ -307,31 +352,31 @@ async function importDictionaryFile(file) {
   if (!file) return;
   setMessages([{ text: `Wörterbuch „${file.name}“ wird importiert. Bei großen Listen kann der Browser kurz beschäftigt sein.` }]);
   const text = await file.text();
-  dictionaryState = analyzeDictionaryText(text, file.name, 3);
-  buildDictionaryIndex();
+  importedDictionaryState = analyzeDictionaryText(text, file.name, 3);
+  refreshCombinedDictionary();
   await saveDictionaryToDb();
   updateDictionaryUi();
-  const stats = dictionaryState.stats;
+  const stats = importedDictionaryState.stats || {};
   setMessages([
-    { type: 'ok', text: `Wörterbuch importiert: ${formatNumber(stats.usable)} nutzbare Wörter stehen bereit.` },
-    ...(stats.ambiguousGridForms ? [{ text: `${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen wurden erkannt, z. B. MASSE aus unterschiedlichen Originalwörtern. Für das Rätsel wird jeweils eine bevorzugte Form verwendet.` }] : []),
+    { type: 'ok', text: `Zusatzliste importiert: ${formatNumber(stats.usable)} Wörter wurden zur eingebauten Basisliste ergänzt.` },
+    ...(stats.ambiguousGridForms ? [{ text: `${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen wurden in der Zusatzliste erkannt, z. B. MASSE aus unterschiedlichen Originalwörtern. Für das Rätsel wird jeweils eine bevorzugte Form verwendet.` }] : []),
   ]);
 }
 
 function fillWordInputFromDictionary() {
   const settings = getSettings();
   if (!hasDictionary()) {
-    setMessages([{ type: 'error', text: 'Bitte importiere zuerst eine Wörterbuchdatei.' }]);
+    setMessages([{ type: 'error', text: 'Die Wortliste ist nicht verfügbar. Bitte lade die Seite neu.' }]);
     return false;
   }
   const picked = pickDictionaryWords(settings);
   if (!picked.length) {
-    setMessages([{ type: 'error', text: 'Keine Wörter im Wörterbuch passen zur aktuellen Mindestlänge und zum Format.' }]);
+    setMessages([{ type: 'error', text: 'Keine Wörter in der eingebauten/ergänzten Wortliste passen zur aktuellen Mindestlänge und zum Format.' }]);
     return false;
   }
   els.wordInput.value = picked.map((entry) => entry.original).join('\n');
   saveState();
-  setMessages([{ type: 'ok', text: `${picked.length} Wörter aus dem Wörterbuch wurden in die Wortliste übernommen.` }]);
+  setMessages([{ type: 'ok', text: `${picked.length} Wörter aus der eingebauten/ergänzten Wortliste wurden übernommen.` }]);
   return true;
 }
 
@@ -789,7 +834,7 @@ function renderLists() {
   currentPuzzle.parseIssues.forEach((issue) => items.push(`<li>${escapeHtml(issue)}</li>`));
   currentPuzzle.unplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
   if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Wörter wegen Maximalgrenze nicht verarbeitet.</li>`);
-  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.3 sauber erzeugt.</li>');
+  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.3.1 sauber erzeugt.</li>');
   els.unplacedList.innerHTML = items.join('');
 }
 
@@ -885,7 +930,7 @@ function createPuzzle() {
     if (hasDictionary() && fillWordInputFromDictionary()) {
       settings = getSettings();
     } else {
-      setMessages([{ type: 'error', text: 'Bitte gib Wörter ein, importiere ein Wörterbuch oder trage ein Leitwort ein.' }]);
+      setMessages([{ type: 'error', text: 'Bitte gib Wörter ein, nutze die eingebaute Wortliste oder trage ein Leitwort ein.' }]);
       return;
     }
   }
@@ -899,7 +944,7 @@ function createPuzzle() {
   els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Ausgabeformat: ${settings.width} × ${settings.height}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
-    ...(unplacedCount ? [{ text: `${unplacedCount} Wörter konnten in v0.3 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(unplacedCount ? [{ text: `${unplacedCount} Wörter konnten in v0.3.1 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
   ]);
   updateButtons(Boolean(placedCount));
   saveState();
@@ -1064,7 +1109,7 @@ function resetState() {
   els.downClues.textContent = 'Nach dem Erstellen erscheinen hier die Fragenfelder.';
   els.acrossClues.classList.add('empty-clue-list');
   els.downClues.classList.add('empty-clue-list');
-  setMessages([{ text: 'Zurückgesetzt. Beispielwörter sind wieder geladen; ein importiertes Wörterbuch bleibt erhalten.' }]);
+  setMessages([{ text: 'Zurückgesetzt. Beispielwörter sind wieder geladen; eine importierte Zusatzliste bleibt erhalten.' }]);
 }
 
 
@@ -1076,7 +1121,7 @@ if (els.dictionaryFile) {
       await importDictionaryFile(file);
     } catch (error) {
       console.error(error);
-      setMessages([{ type: 'error', text: 'Das Wörterbuch konnte nicht importiert werden. Bitte prüfe die Datei.' }]);
+      setMessages([{ type: 'error', text: 'Die Zusatzliste konnte nicht importiert werden. Bitte prüfe die Datei.' }]);
     } finally {
       els.dictionaryFile.value = '';
     }
@@ -1089,11 +1134,12 @@ if (els.fillFromDictionary) {
 
 if (els.clearDictionary) {
   els.clearDictionary.addEventListener('click', async () => {
-    dictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [] };
-    dictionaryIndex = new Map();
+    importedDictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [] };
     await clearDictionaryFromDb();
+    refreshCombinedDictionary();
     updateDictionaryUi();
-    setMessages([{ text: 'Wörterbuch entfernt. Du kannst jederzeit eine neue Wortliste importieren.' }]);
+    saveState();
+    setMessages([{ type: 'ok', text: 'Zusatzliste entfernt. Die eingebaute deutsche Basisliste bleibt aktiv.' }]);
   });
 }
 
@@ -1226,5 +1272,5 @@ if ('serviceWorker' in navigator) {
 loadState();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.3. Du kannst jetzt eine TXT- oder DIC-Wortliste importieren und lokal durchsuchen.' }]);
+  setMessages([{ text: 'Bereit für v0.3.1. Die eingebaute deutsche Basisliste ist aktiv; TXT- oder DIC-Dateien kannst Du zusätzlich importieren.' }]);
 });

@@ -1,24 +1,26 @@
-# Kreuzwortdrucker v0.3.0
+# Kreuzwortdrucker v0.3.1
 
-PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit Export für Buchsatz/Canva.
+PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit eingebauter Basis-Wortliste, Zusatzimport, Fragenverwaltung und Export für Buchsatz/Canva.
 
-## Enthalten in v0.3.0
+## Enthalten in v0.3.1
 
 - PWA-Grundstruktur mit Manifest und Service Worker
 - einstellbares Zielformat, z. B. 22 × 15 Kästchen
 - Eingabe einer eigenen Wortliste
-- Import lokaler Open-Source-Wortlisten als TXT oder Hunspell-DIC
-- lokale Speicherung des importierten Wörterbuchs im Browser über IndexedDB
+- eingebaute deutsche Basis-Wortliste mit rund 800 handkuratierten Begriffen
+- Button „Wortliste aus Basisliste füllen“
+- zusätzlicher Import lokaler Wortlisten als TXT oder einfache Hunspell-DIC-Dateien
+- Import bleibt als Ergänzung erhalten, z. B. für englische Wörter, Fremdwörter, Eigennamen oder Fachbegriffe
+- lokale Speicherung importierter Zusatzlisten im Browser über IndexedDB
 - automatische Umschrift: Ä → AE, Ö → OE, Ü → UE, ß → SS
 - Wörterbuch-Normalisierung und Bereinigung:
   - Hunspell-Flags nach `/` werden entfernt
   - Leer-/Sonderzeichen werden bereinigt
-  - sehr kurze Wörter unter 3 Buchstaben werden beim Import ausgeschlossen
+  - sehr kurze Wörter unter 3 Buchstaben werden ausgeschlossen
   - die aktuelle Mindestwortlänge filtert die Auswahl für das Rätsel
 - Erkennung von Dubletten und mehrdeutigen Gitterformen
   - Beispiel: „Masse“ und „Maße“ ergeben beide `MASSE`
-- interne Wörterbuchsuche mit Filter nach aktueller Mindestlänge und Formatgröße
-- Button „Wortliste aus Wörterbuch füllen“
+- interne Suche über eingebaute Basisliste plus importierte Zusatzliste
 - einfacher Freiform-im-Format-Generator
 - Button „Rätsel erstellen“
 - optionale Leitwörter waagrecht/senkrecht als frühe Testfunktion
@@ -46,8 +48,17 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit Export für Buc
   - Projektstand inklusive Fragen
 - lokale Speicherung der letzten Eingaben und Fragen im Browser
 
+## Änderungen gegenüber v0.3.0
+
+- Eine eingebaute deutsche Basis-Wortliste wird direkt mitgeliefert.
+- Die App ist sofort nutzbar, ohne dass zuerst ein externes Wörterbuch heruntergeladen werden muss.
+- Der bisherige Wörterbuchimport bleibt erhalten, arbeitet aber jetzt als Zusatzliste.
+- „Wörterbuch entfernen“ wurde zu „Zusatzliste entfernen“: Die eingebaute Basisliste bleibt immer aktiv.
+- Service-Worker-Cache und Versionsnummer wurden auf v0.3.1 erhöht.
+
 ## Noch nicht enthalten
 
+- große vollständige Hunspell-/igerman98-Wortliste als mitgelieferter Datenbestand
 - echte Kategorien wie Abkürzung, Fremdwort, Eigenname
 - gezielte Qualitätsbewertung der Wörter
 - automatische semantische Auswahl anspruchsvoller Wörter
@@ -61,9 +72,9 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit Export für Buc
 ## Nutzung
 
 1. Ordner lokal über einen kleinen Webserver ausliefern.
-2. Optional eine TXT- oder DIC-Wortliste importieren.
-3. Mindestwortlänge, Format und maximale Wortanzahl einstellen.
-4. Optional „Wortliste aus Wörterbuch füllen“ klicken oder eigene Wörter eingeben.
+2. Mindestwortlänge, Format und maximale Wortanzahl einstellen.
+3. Optional „Wortliste aus Basisliste füllen“ klicken oder eigene Wörter eingeben.
+4. Optional eine TXT- oder DIC-Zusatzliste importieren.
 5. „Rätsel erstellen“ klicken.
 6. Unter dem Gitter Fragen zu den nummerierten Wörtern eintragen.
 7. Gitter, Lösung und Fragen exportieren.
@@ -80,14 +91,14 @@ Dann im Browser öffnen:
 http://localhost:8000
 ```
 
-## Hinweise zum Wörterbuch
+## Hinweise zur eingebauten Wortliste
 
-Das Programm liefert bewusst keine große Wortliste mit. Importiere nur Wortlisten, deren Lizenz für Deinen Zweck passt. Der Import läuft lokal im Browser; die Wörter werden nicht an einen Server übertragen.
+Die eingebaute Basisliste ist eine handkuratierte Startliste, damit der Kreuzwortdrucker sofort ohne externen Download nutzbar ist. Sie ist noch keine vollständige Rechtschreib- oder Kreuzworträtselwortliste. Für spätere Versionen kann diese Liste durch eine größere geprüfte Open-Source-Wortbasis ersetzt oder erweitert werden.
 
-TXT-Dateien sollten ein Wort pro Zeile enthalten. Hunspell-DIC-Dateien werden einfach gelesen, wobei die erste Zählzeile und Flags nach `/` ignoriert werden. Affix-Regeln aus `.aff`-Dateien werden in v0.3.0 noch nicht ausgewertet.
+Der Import bleibt bewusst erhalten. TXT-Dateien sollten ein Wort pro Zeile enthalten. Hunspell-DIC-Dateien werden einfach gelesen, wobei die erste Zählzeile und Flags nach `/` ignoriert werden. Affix-Regeln aus `.aff`-Dateien werden in v0.3.1 noch nicht ausgewertet.
 
 ## Hinweise zum Generator
 
-Der Generator ist in v0.3.0 weiterhin bewusst einfach gehalten. Er sucht Kreuzungen zwischen den ausgewählten Wörtern und setzt nicht nutzbare Felder beim Export als schwarze Felder. Nicht platzierbare Wörter werden angezeigt.
+Der Generator ist in v0.3.1 weiterhin bewusst einfach gehalten. Er sucht Kreuzungen zwischen den ausgewählten Wörtern und setzt nicht nutzbare Felder beim Export als schwarze Felder. Nicht platzierbare Wörter werden angezeigt.
 
-Die Wörterbuchfunktion ist die Grundlage für spätere Versionen mit Wortqualität, Kategorien, Abkürzungsfiltern und besserer automatischer Auswahl.
+Die Wortlistenfunktion ist die Grundlage für spätere Versionen mit Wortqualität, Kategorien, Abkürzungsfiltern und besserer automatischer Auswahl.
