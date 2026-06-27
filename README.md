@@ -1,14 +1,17 @@
-# Kreuzwortdrucker v0.3.2
+# Kreuzwortdrucker v0.3.3
 
-PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit eingebautem deutschem Vollfundus, Zusatzimport, Ausschlussliste, Fragenverwaltung und Export für Buchsatz/Canva.
+PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit eingebautem deutschem Vollfundus, Wortformenfilter, Zusatzimport, Ausschlussliste, Fragenverwaltung und Export für Buchsatz/Canva.
 
-## Enthalten in v0.3.2
+## Enthalten in v0.3.3
 
 - PWA-Grundstruktur mit Manifest und Service Worker
 - einstellbares Zielformat, z. B. 22 × 15 Kästchen
+- Standard-Mindestwortlänge 3, damit klassische kurze Kreuzwortbegriffe wie ERZ möglich bleiben
 - Button „Rätsel erstellen“ erzeugt das Rätsel direkt aus dem eingebauten Wörterbuchfundus
 - eingebauter deutscher Vollfundus aus `@cspell/dict-de-de` 4.1.2 / de-DE_frami / igerman98
 - rund 759.000 normalisierte, deduplizierte Wörter im eingebauten Fundus
+- Wortformenfilter mit drei Modi: basisnah, streng und alle Wörterbuchformen
+- standardmäßig werden typische gebeugte Verb- und Adjektivformen aus dem Generatorpool herausgefiltert
 - optionale Zusatz-/Wunschwörter im Textfeld
 - optionale Leitwörter waagrecht/senkrecht
 - optionale Liste „Nicht verwenden“ für Wörter, die ausgeschlossen werden sollen
@@ -48,16 +51,16 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit eingebautem deu
   - Projektstand inklusive Fragen
 - lokale Speicherung der letzten Eingaben und Fragen im Browser
 
-## Änderungen gegenüber v0.3.1
+## Änderungen gegenüber v0.3.2
 
-- Die kleine handkuratierte Startliste wurde durch einen großen eingebauten deutschen Wörterbuchfundus ersetzt.
-- „Rätsel erstellen“ benötigt keine vorher manuell zusammengestellte Wortliste mehr.
-- Das bisherige Wortfeld ist jetzt nur noch für Zusatz-/Wunschwörter gedacht.
-- Es gibt eine neue Ausschlussliste „Nicht verwenden“.
-- In der Lösungsliste können Wörter direkt gesperrt werden.
-- Der Import bleibt erhalten, arbeitet aber als Zusatzliste.
-- Rechtliche Quellenhinweise wurden in `THIRD_PARTY_NOTICES.md` ergänzt.
-- Service-Worker-Cache und Versionsnummer wurden auf v0.3.2 erhöht.
+- neuer Filter „Wortformen“ ergänzt
+- Standardmodus ist jetzt „basisnah, weniger gebeugte Formen“
+- typische gebeugte Verbformen wie „abbildetest“, „abbauten“ oder Partizipformen werden deutlich seltener bzw. gar nicht mehr ausgewählt
+- typische gebeugte Adjektivformen wie „aalartigem“, „zyklischem“ oder „zwölfjähriger“ werden herausgefiltert, wenn eine Basisform im Wörterbuch vorhanden ist
+- Suchergebnisse und Generator berücksichtigen den aktiven Wortformenfilter
+- Wörterbuchstatus zeigt nun an, wie viele Wörter nach Länge und Wortformenfilter noch nutzbar sind
+- Modus „Alle Wörterbuchformen“ bleibt erhalten, falls bewusst gebeugte Formen erlaubt sein sollen
+- Service-Worker-Cache und Versionsnummer wurden auf v0.3.3 erhöht.
 
 ## Noch nicht enthalten
 
@@ -74,7 +77,7 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit eingebautem deu
 ## Nutzung
 
 1. Ordner lokal über einen kleinen Webserver ausliefern.
-2. Mindestwortlänge, Format und maximale Wortanzahl einstellen.
+2. Mindestwortlänge, Format, maximale Wortanzahl und Wortformenfilter einstellen.
 3. Optional Zusatz-/Wunschwörter oder Leitwörter eintragen.
 4. Optional Wörter unter „Nicht verwenden“ eintragen.
 5. Optional eine TXT- oder DIC-Zusatzliste importieren.
@@ -103,6 +106,6 @@ Weitere Hinweise stehen in `THIRD_PARTY_NOTICES.md` und `LICENSE-cspell-dict-de-
 
 ## Hinweise zum Generator
 
-Der Generator ist in v0.3.2 weiterhin bewusst einfach gehalten. Er zieht Kandidaten aus dem großen Wörterbuchfundus, sucht Kreuzungen und setzt nicht genutzte Felder beim Export als schwarze Felder. Nicht platzierbare Kandidaten werden angezeigt.
+Der Generator ist in v0.3.3 weiterhin bewusst einfach gehalten. Er zieht Kandidaten aus dem großen Wörterbuchfundus, filtert je nach Einstellung typische gebeugte Formen, sucht Kreuzungen und setzt nicht genutzte Felder beim Export als schwarze Felder. Nicht platzierbare Kandidaten werden angezeigt.
 
 Die Wortlistenfunktion ist die Grundlage für spätere Versionen mit Wortqualität, Kategorien, Abkürzungsfiltern und besserer automatischer Auswahl.

@@ -1,9 +1,9 @@
 'use strict';
 
-const VERSION = '0.3.2';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.3.2.lastState';
+const VERSION = '0.3.3';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.3.3.lastState';
 const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
-const DB_NAME = 'kreuzwortdrucker-db-v0-3-2';
+const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
 const els = {
@@ -11,6 +11,7 @@ const els = {
   gridHeight: document.querySelector('#gridHeight'),
   minLength: document.querySelector('#minLength'),
   maxWords: document.querySelector('#maxWords'),
+  wordFormMode: document.querySelector('#wordFormMode'),
   seedAcross: document.querySelector('#seedAcross'),
   seedDown: document.querySelector('#seedDown'),
   cropToContent: document.querySelector('#cropToContent'),
@@ -282,6 +283,99 @@ function getBlockedGridSet(text = '') {
   return set;
 }
 
+
+
+function getWordFormModeLabel(mode) {
+  if (mode === 'all') return 'alle Wörterbuchformen';
+  if (mode === 'strict') return 'streng basisnah';
+  return 'basisnah';
+}
+
+function hasAnyDictionaryGrid(...grids) {
+  return grids.some((grid) => grid && grid.length >= 2 && dictionaryIndex.has(grid));
+}
+
+function stemExistsByRemoving(grid, suffixes) {
+  return suffixes.some((suffix) => {
+    if (!grid.endsWith(suffix) || grid.length <= suffix.length + 2) return false;
+    const stem = grid.slice(0, -suffix.length);
+    return hasAnyDictionaryGrid(stem);
+  });
+}
+
+function likelyInflectedNoun(grid) {
+  const checks = [
+    ['INNEN', 'IN'],
+    ['ERN', 'ER'],
+    ['EN', ''],
+    ['ES', ''],
+    ['E', ''],
+    ['ER', ''],
+    ['N', ''],
+    ['S', ''],
+  ];
+  return checks.some(([suffix, replacement]) => {
+    if (!grid.endsWith(suffix) || grid.length <= suffix.length + 2) return false;
+    const stem = grid.slice(0, -suffix.length) + replacement;
+    return dictionaryIndex.has(stem);
+  });
+}
+
+function likelyInflectedAdjective(grid) {
+  const comparativeSuffixes = ['EREM', 'EREN', 'ERER', 'ERES', 'ERE', 'ER'];
+  const superlativeSuffixes = ['STEM', 'STEN', 'STER', 'STES', 'STE'];
+  const adjectiveSuffixes = ['EM', 'EN', 'ER', 'ES', 'E'];
+  return stemExistsByRemoving(grid, comparativeSuffixes)
+    || stemExistsByRemoving(grid, superlativeSuffixes)
+    || stemExistsByRemoving(grid, adjectiveSuffixes);
+}
+
+function likelyInflectedVerb(grid, originalLower) {
+  const verbRoots = (root) => hasAnyDictionaryGrid(`${root}EN`, `${root}N`);
+
+  const participleSuffixes = ['ENDES', 'ENDER', 'ENDEN', 'ENDEM', 'ENDE', 'END'];
+  if (participleSuffixes.some((suffix) => grid.endsWith(suffix) && verbRoots(grid.slice(0, -suffix.length)))) return true;
+
+  const pastSuffixes = ['TETEST', 'TETET', 'TEST', 'TETEN', 'TEN', 'TETE', 'TET', 'TE'];
+  if (pastSuffixes.some((suffix) => grid.endsWith(suffix) && verbRoots(grid.slice(0, -suffix.length)))) return true;
+
+  if (grid.endsWith('ST') && verbRoots(grid.slice(0, -2))) return true;
+  if (grid.endsWith('T') && verbRoots(grid.slice(0, -1))) return true;
+  if (grid.endsWith('E') && hasAnyDictionaryGrid(`${grid}N`, `${grid.slice(0, -1)}EN`, `${grid.slice(0, -1)}N`)) return true;
+
+  if (/ge/.test(originalLower) && /(t|et|en|ene|enem|enen|ener|enes)$/.test(originalLower)) return true;
+  return false;
+}
+
+function isLikelyInflectedEntry(entry, mode = 'basic') {
+  if (!entry || mode === 'all') return false;
+  const original = String(entry.original || entry.grid || '');
+  const grid = entry.grid || normalizeWord(original).grid;
+  if (!grid || grid.length <= 2) return false;
+
+  const originalLower = original.toLocaleLowerCase('de-DE');
+  const startsUpper = /^[A-ZÄÖÜẞ]/.test(original);
+  const startsLower = /^[a-zäöüß]/.test(original);
+
+  if (startsLower) {
+    if (likelyInflectedVerb(grid, originalLower)) return true;
+    if (likelyInflectedAdjective(grid)) return true;
+    if (mode === 'strict' && /(e|em|en|er|es|st|t|te|ten|test|tet|end|ende|endem|enden|ender|endes)$/.test(originalLower)) {
+      const baseLikeEndings = /(bar|haft|ig|isch|lich|los|sam|weise|mal|wärts|seits|fern|nah|lang|hoch|tief|voll|leer)$/;
+      return !baseLikeEndings.test(originalLower);
+    }
+    return false;
+  }
+
+  if (startsUpper) {
+    if (likelyInflectedNoun(grid)) return true;
+    if (mode === 'strict' && /(innen|ern|en|es|s)$/.test(originalLower) && grid.length > 4) return true;
+    return false;
+  }
+
+  return false;
+}
+
 function appendBlockedWord(rawWord) {
   const clean = normalizeWord(rawWord);
   if (!clean.grid || !els.blockedWordsInput) return;
@@ -310,13 +404,17 @@ function updateDictionaryUi() {
     return;
   }
   const stats = dictionaryState.stats || {};
+  const settings = getSettings();
+  const filteredCount = getFilteredDictionaryEntries(settings).length;
   const importedInfo = hasImportedDictionary()
     ? `<br><span class="word-meta">Zusatzliste: ${escapeHtml(dictionaryState.importSourceName)} · ${formatNumber(dictionaryState.importedCount)} importierte Einträge</span>`
     : '<br><span class="word-meta">Keine Zusatzliste importiert. Du kannst fremdsprachige oder eigene Wörter zusätzlich laden.</span>';
   const ambiguous = stats.ambiguousGridForms ? ` · ${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen erkannt` : '';
+  const filterInfo = `<br><span class="word-meta">Aktiver Wortformenfilter: ${escapeHtml(getWordFormModeLabel(settings.wordFormMode))} · ${formatNumber(filteredCount)} Wörter nach aktueller Länge/Form nutzbar</span>`;
   els.dictionaryStatus.innerHTML = `
     <strong>${escapeHtml(dictionaryState.sourceName)}</strong><br>
     ${formatNumber(stats.usable)} nutzbare Wörter verfügbar · davon ${formatNumber(dictionaryState.builtInCount)} eingebaut · ${formatNumber(stats.tooShort)} sehr kurze Wörter ausgeschlossen${escapeHtml(ambiguous)}
+    ${filterInfo}
     ${importedInfo}`;
   renderDictionaryResults();
 }
@@ -327,7 +425,8 @@ function getFilteredDictionaryEntries(settings = getSettings(), extraExcluded = 
   return dictionaryState.entries.filter((entry) => entry.length >= settings.minLength
     && entry.length <= maxLength
     && !blocked.has(entry.grid)
-    && !extraExcluded.has(entry.grid));
+    && !extraExcluded.has(entry.grid)
+    && !isLikelyInflectedEntry(entry, settings.wordFormMode));
 }
 
 function pickDictionaryWords(settings = getSettings(), extraExcluded = new Set(), targetCount = settings.maxWords) {
@@ -340,6 +439,7 @@ function pickDictionaryWords(settings = getSettings(), extraExcluded = new Set()
   dictionaryState.entries.forEach((entry) => {
     if (entry.length < settings.minLength || entry.length > maxLength) return;
     if (blocked.has(entry.grid) || extraExcluded.has(entry.grid)) return;
+    if (isLikelyInflectedEntry(entry, settings.wordFormMode)) return;
     checked += 1;
     if (sampled.length < sampleTarget) {
       sampled.push(entry);
@@ -928,7 +1028,7 @@ function renderLists() {
   currentPuzzle.parseIssues.forEach((issue) => items.push(`<li>${escapeHtml(issue)}</li>`));
   currentPuzzle.unplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
   if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Wörter wegen Maximalgrenze nicht verarbeitet.</li>`);
-  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.3.2 sauber erzeugt.</li>');
+  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.3.3 sauber erzeugt.</li>');
   els.unplacedList.innerHTML = items.join('');
 }
 
@@ -991,8 +1091,9 @@ function getSettings() {
   return {
     width: clampNumber(els.gridWidth.value, 5, 40, 22),
     height: clampNumber(els.gridHeight.value, 5, 40, 15),
-    minLength: clampNumber(els.minLength.value, 2, 30, 4),
+    minLength: clampNumber(els.minLength.value, 2, 30, 3),
     maxWords: clampNumber(els.maxWords.value, 1, 200, 40),
+    wordFormMode: els.wordFormMode ? els.wordFormMode.value : 'basic',
     seedAcross: els.seedAcross.value,
     seedDown: els.seedDown.value,
     cropToContent: els.cropToContent.checked,
@@ -1035,7 +1136,7 @@ function createPuzzle() {
   els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Ausgabeformat: ${settings.width} × ${settings.height}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
-    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.3.2 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.3.3 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
   ]);
   updateButtons(Boolean(placedCount));
   saveState();
@@ -1137,6 +1238,7 @@ function saveState() {
       gridHeight: els.gridHeight.value,
       minLength: els.minLength.value,
       maxWords: els.maxWords.value,
+      wordFormMode: els.wordFormMode ? els.wordFormMode.value : 'basic',
       seedAcross: els.seedAcross.value,
       seedDown: els.seedDown.value,
       cropToContent: els.cropToContent.checked,
@@ -1179,8 +1281,9 @@ function resetState() {
   LEGACY_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
   els.gridWidth.value = '22';
   els.gridHeight.value = '15';
-  els.minLength.value = '4';
+  els.minLength.value = '3';
   els.maxWords.value = '40';
+  if (els.wordFormMode) els.wordFormMode.value = 'basic';
   els.seedAcross.value = '';
   els.seedDown.value = '';
   els.cropToContent.checked = true;
@@ -1243,7 +1346,7 @@ if (els.dictionarySearch) {
   });
 }
 
-[els.minLength, els.gridWidth, els.gridHeight, els.maxWords].forEach((input) => {
+[els.minLength, els.gridWidth, els.gridHeight, els.maxWords, els.wordFormMode].filter(Boolean).forEach((input) => {
   input.addEventListener('change', () => {
     renderDictionaryResults();
     saveState();
@@ -1380,5 +1483,5 @@ if ('serviceWorker' in navigator) {
 loadState();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.3.2. Der eingebaute deutsche Vollfundus ist aktiv; TXT- oder DIC-Dateien kannst Du zusätzlich importieren.' }]);
+  setMessages([{ text: 'Bereit für v0.3.3. Der eingebaute deutsche Vollfundus ist aktiv; TXT- oder DIC-Dateien kannst Du zusätzlich importieren.' }]);
 });
