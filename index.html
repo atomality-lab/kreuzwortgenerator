@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#1f2937" />
-  <title>Kreuzwortdrucker v0.5.0</title>
+  <title>Kreuzwortdrucker v0.5.1</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -14,7 +14,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">PWA-Prototyp</p>
-      <h1>Kreuzwortdrucker <span>v0.5.0</span></h1>
+      <h1>Kreuzwortdrucker <span>v0.5.1</span></h1>
     </div>
     <div class="header-actions">
       <button id="installButton" class="ghost hidden" type="button">App installieren</button>
@@ -25,7 +25,7 @@
   <main class="app-layout">
     <section class="panel controls" aria-labelledby="settingsTitle">
       <h2 id="settingsTitle">Rätsel erstellen</h2>
-      <p class="hint">v0.5.0 baut den persönlichen Wortschatz aus: Wörter können mehreren Listen zugeordnet werden, auch direkt beim Anlegen oder Import. Eine persönliche Liste kann direkt als Themenbasis fürs Rätsel verwendet werden.</p>
+      <p class="hint">v0.5.1 räumt die Oberfläche auf: Persönliche Listen sind die Themenbasis, der große Datenbank-Wortschatz bleibt als Füllfundus im Hintergrund und wird nur bei Bedarf durchsucht.</p>
 
       <div class="grid two">
         <label>
@@ -117,7 +117,7 @@
 
       <details class="advanced personal-tools" open>
         <summary>Persönlicher Wortschatz</summary>
-        <p class="hint">Hier sammelst Du eigene Themenwörter dauerhaft im Browser. Du kannst Listen anlegen, Wörter hinzufügen, Wortlisten importieren, Wörter sperren und eine Liste als Zusatz-/Wunschwörter ins aktuelle Rätsel übernehmen.</p>
+        <p class="hint">Hier sammelst Du eigene Themenwörter dauerhaft im Browser. Du kannst Listen anlegen, Wörter hinzufügen, Wortlisten importieren, Wörter sperren und eine Liste als Themenbasis ins aktuelle Rätsel übernehmen.</p>
         <div id="personalStatus" class="dictionary-status">Persönlicher Wortschatz wird geladen.</div>
 
         <div class="grid two">
@@ -169,15 +169,15 @@
         </div>
       </details>
 
-      <details class="advanced dictionary-tools" open>
-        <summary>Wörterbuch nutzen, ergänzen und durchsuchen</summary>
-        <p class="hint">Der eingebaute deutsche Vollfundus ist sofort aktiv. Zusätzlich kannst Du TXT- oder Hunspell-DIC-Dateien lokal im Browser ergänzen, z. B. für englische Wörter, Fremdwörter oder Fachbegriffe.</p>
+      <details class="advanced dictionary-tools">
+        <summary>Datenbank-Wortschatz optional durchsuchen/ergänzen</summary>
+        <p class="hint">Der eingebaute deutsche Vollfundus arbeitet beim Erstellen im Hintergrund. Dieser Bereich ist nur zum Prüfen, Suchen oder Ergänzen gedacht, z. B. für englische Wörter, Fremdwörter oder Fachbegriffe.</p>
         <label>
           Zusatzliste auswählen
           <input id="dictionaryFile" type="file" accept=".txt,.dic,text/plain" />
         </label>
         <div class="button-row wrap">
-          <button id="fillFromDictionary" type="button" disabled>Zufallswörter ins Zusatzfeld</button>
+          <button id="fillFromDictionary" type="button" disabled>Zufallswörter als Themenwörter übernehmen</button>
           <button id="clearDictionary" class="ghost" type="button" disabled>Zusatzliste entfernen</button>
         </div>
         <div id="dictionaryStatus" class="dictionary-status">Eingebauter deutscher Vollfundus wird geladen.</div>
@@ -185,20 +185,25 @@
           Wörterbuch durchsuchen
           <input id="dictionarySearch" type="search" placeholder="z. B. METAPHER oder Maß" disabled />
         </label>
-        <div id="dictionaryResults" class="dictionary-results empty-clue-list">Nach dem Laden kannst Du hier Wörter suchen.</div>
+        <div id="dictionaryResults" class="dictionary-results empty-clue-list">Gib einen Suchbegriff ein, um den Datenbank-Wortschatz zu prüfen. Ohne Suche wird keine Vorschau angezeigt.</div>
       </details>
 
-      <label>
-        Zusatz-/Wunschwörter (optional)
-        <textarea id="wordInput" spellcheck="false" rows="8" placeholder="Optional: eigene Wörter, Themenwörter oder Wörter, die bevorzugt versucht werden sollen. Das Rätsel wird auch ohne Eintrag aus dem eingebauten Wörterbuch erzeugt."></textarea>
-      </label>
+      <details class="advanced current-puzzle-word-tools">
+        <summary>Aktuelle Themenwörter und Ausschlüsse prüfen/bearbeiten</summary>
+        <p class="hint">Diese Felder sind der Arbeitskorb für das aktuelle Rätsel. Wenn Du „Rätsel aus Liste erstellen“ nutzt, werden die Wörter der ausgewählten persönlichen Liste hier eingetragen. Du kannst sie vor dem Erzeugen noch ergänzen oder entfernen.</p>
+        <label>
+          Themenwörter für dieses Rätsel
+          <textarea id="wordInput" spellcheck="false" rows="8" placeholder="Optional: eigene Themenwörter. Ein Wort pro Zeile. Persönliche Listen können dieses Feld automatisch füllen."></textarea>
+        </label>
 
-      <label>
-        Nicht verwenden (optional)
-        <textarea id="blockedWordsInput" spellcheck="false" rows="6" placeholder="Ein Wort pro Zeile, z. B. ER
+        <label>
+          Nicht verwenden
+          <textarea id="blockedWordsInput" spellcheck="false" rows="6" placeholder="Ein Wort pro Zeile, z. B. ER
 ES
 UND"></textarea>
-      </label>
+        </label>
+        <p class="hint">Gesperrte Wörter aus dem persönlichen Wortschatz werden zusätzlich automatisch ausgeschlossen.</p>
+      </details>
 
       <div class="button-row">
         <button id="generateButton" class="primary" type="button">Rätsel erstellen</button>
@@ -271,15 +276,15 @@ UND"></textarea>
       </div>
 
       <details open>
-        <summary>Nicht platziert / Hinweise</summary>
+        <summary>Nicht platzierte Themenwörter / Hinweise</summary>
         <ul id="unplacedList" class="issue-list"></ul>
       </details>
     </section>
   </main>
 
   <footer class="app-footer">
-    <span>Kreuzwortdrucker v0.5.0</span>
-    <span>Freiform-im-Format-Prototyp mit deutschem Vollfundus, persönlichem Wortschatz, Listenverwaltung, Ausschlussliste, Fragenverwaltung und Canva-Export</span>
+    <span>Kreuzwortdrucker v0.5.1</span>
+    <span>Freiform-im-Format-Prototyp mit persönlichem Wortschatz als Themenbasis, Datenbank-Füllfundus, Fragenverwaltung und Canva-Export</span>
   </footer>
 
   <script src="builtin-de.js"></script>

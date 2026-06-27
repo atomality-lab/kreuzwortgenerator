@@ -1,18 +1,16 @@
-# Kreuzwortdrucker v0.5.0
+# Kreuzwortdrucker v0.5.1
 
 PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit großem deutschem Wortfundus, persönlichem Wortschatz, Fragenverwaltung und SVG-/TXT-/CSV-Export.
 
-## Neu in v0.5.0
+## Neu in v0.5.1
 
-- persönlicher Wortschatz erweitert
-- Wörter können mehreren Listen gleichzeitig zugeordnet werden
-- beim Anlegen eines Wortes können mehrere Listen ausgewählt werden
-- beim Import einer TXT-/CSV-Wortliste können mehrere Listen als Ziel ausgewählt werden
-- bestehende Wörter können nachträglich weiteren Listen hinzugefügt werden
-- persönliche Listen zeigen weiterhin, ob Wörter gesperrt sind
-- ausgewählte persönliche Liste kann direkt als Themenbasis verwendet werden
-- neuer Button: **Rätsel aus Liste erstellen**
-- persönlicher Wortschatz aus v0.4.x wird automatisch übernommen
+- Oberfläche aufgeräumt: persönliche Listen stehen stärker im Mittelpunkt
+- Datenbank-Wortschatz ist jetzt standardmäßig eingeklappt und als Hintergrund-/Füllfundus beschrieben
+- Wörterbuchsuche zeigt ohne Suchbegriff keine lange Vorschau mehr an
+- Bereich für aktuelle Themenwörter und Ausschlüsse ist in einen eigenen aufklappbaren Arbeitskorb gewandert
+- „Nicht platziert“ zeigt prominent nur noch nicht platzierte Themenwörter, nicht mehr jeden verworfenen Datenbank-Füllkandidaten
+- Statistik unterscheidet zwischen platzierten Wörtern und nicht platzierten Themenwörtern
+- Texte von „Zusatz-/Wunschwörter“ zu „Themenwörter“ geschärft
 
 ## Bereits enthalten
 
@@ -74,4 +72,4 @@ Vor dem Löschen von Website-Daten bitte den persönlichen Wortschatz als JSON e
 
 ## Hinweis zur nächsten Generatorstufe
 
-v0.5.0 verbessert den persönlichen Wortschatz und macht persönliche Listen als Themenbasis nutzbar. Die eigentliche Zwei-Schritt-Logik „erst Themenliste möglichst vollständig platzieren, danach Lücken mit Datenbankwörtern füllen“ ist vorbereitet, aber noch nicht als eigener Füllmodus umgesetzt.
+v0.5.1 verbessert die Oberfläche für den Themenwort-Workflow und macht klarer, dass persönliche Listen die Themenbasis sind. Die eigentliche Zwei-Schritt-Logik „erst Themenliste möglichst vollständig platzieren, danach Lücken mit Datenbankwörtern füllen“ ist vorbereitet, aber noch nicht als eigener Füllmodus umgesetzt.

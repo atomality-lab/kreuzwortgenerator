@@ -1,8 +1,8 @@
 'use strict';
 
-const VERSION = '0.5.0';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.5.0.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.5.1';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.5.1.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
@@ -439,7 +439,7 @@ function useSelectedPersonalList() {
   }
   els.wordInput.value = words.map((word) => word.original).join('\n');
   saveState();
-  setMessages([{ type: 'ok', text: `${formatNumber(words.length)} Wörter aus „${personalDictionary.selectedList}“ wurden als Zusatz-/Wunschwörter übernommen.` }]);
+  setMessages([{ type: 'ok', text: `${formatNumber(words.length)} Wörter aus „${personalDictionary.selectedList}“ wurden als Themenwörter übernommen.` }]);
   return true;
 }
 
@@ -690,7 +690,7 @@ async function clearDictionaryFromDb() {
     });
     db.close();
   } catch (error) {
-    console.warn('Zusatzwörterbuch konnte nicht gelöscht werden:', error);
+    console.warn('Themenwörterbuch konnte nicht gelöscht werden:', error);
   }
 }
 
@@ -1042,7 +1042,7 @@ function pickDictionaryWords(settings = getSettings(), extraExcluded = new Set()
 function renderDictionaryResults() {
   if (!els.dictionaryResults) return;
   if (!hasDictionary()) {
-    els.dictionaryResults.textContent = 'Nach dem Import kannst Du hier Wörter suchen.';
+    els.dictionaryResults.textContent = 'Der Datenbank-Wortschatz konnte nicht geladen werden.';
     els.dictionaryResults.classList.add('empty-clue-list');
     return;
   }
@@ -1051,13 +1051,15 @@ function renderDictionaryResults() {
   const queryRaw = els.dictionarySearch.value.trim();
   const query = normalizeWord(queryRaw).grid;
   const filtered = getFilteredDictionaryEntries(settings);
-  let matches = [];
-  if (query) {
-    const rawUpper = queryRaw.toUpperCase();
-    matches = filtered.filter((entry) => entry.grid.includes(query) || entry.original.toUpperCase().includes(rawUpper));
-  } else {
-    matches = filtered.slice(0, 24);
+
+  if (!query) {
+    els.dictionaryResults.classList.add('empty-clue-list');
+    els.dictionaryResults.innerHTML = `Datenbank-Fundus aktiv: ${formatNumber(filtered.length)} Wörter passen zu Mindestlänge und Wortformenfilter. Gib einen Suchbegriff ein, wenn Du gezielt prüfen möchtest, ob ein Wort enthalten ist.`;
+    return;
   }
+
+  const rawUpper = queryRaw.toUpperCase();
+  const matches = filtered.filter((entry) => entry.grid.includes(query) || entry.original.toUpperCase().includes(rawUpper));
   const limit = 40;
   const visible = matches.slice(0, limit);
   els.dictionaryResults.classList.remove('empty-clue-list');
@@ -1065,11 +1067,8 @@ function renderDictionaryResults() {
     els.dictionaryResults.innerHTML = '<span class="word-meta">Keine Treffer mit der aktuellen Mindestlänge.</span>';
     return;
   }
-  const intro = query
-    ? `${formatNumber(matches.length)} Treffer für „${escapeHtml(queryRaw)}“`
-    : `${formatNumber(filtered.length)} Wörter passen zur aktuellen Mindestlänge. Erste Vorschau:`;
   els.dictionaryResults.innerHTML = `
-    <div class="dictionary-result-summary">${intro}</div>
+    <div class="dictionary-result-summary">${formatNumber(matches.length)} Treffer für „${escapeHtml(queryRaw)}“</div>
     <div class="dictionary-result-list">
       ${visible.map((entry) => `<span class="dictionary-word" title="${escapeHtml(entry.original)}">${escapeHtml(entry.original)} <small>${escapeHtml(entry.grid)} · ${entry.length} · ${escapeHtml(getWordTypeLabel(classifyWordType(entry)))}</small></span>`).join('')}
     </div>
@@ -1182,7 +1181,7 @@ function buildGenerationWords(options) {
       }
     });
   } else if (!words.length) {
-    issues.push('Kein Wörterbuch verfügbar und keine Zusatz-/Leitwörter eingetragen.');
+    issues.push('Kein Wörterbuch verfügbar und keine Themen-/Leitwörter eingetragen.');
   }
 
   return {
@@ -1609,10 +1608,18 @@ function renderLists() {
 
   const items = [];
   currentPuzzle.parseIssues.forEach((issue) => items.push(`<li>${escapeHtml(issue)}</li>`));
-  currentPuzzle.unplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
-  if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Wörter wegen Maximalgrenze nicht verarbeitet.</li>`);
-  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.5.0 sauber erzeugt.</li>');
+  const themeUnplaced = getThemeUnplacedWords(currentPuzzle);
+  themeUnplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
+  if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Themen- oder Füllkandidaten wurden wegen der Maximalgrenze nicht verarbeitet.</li>`);
+  const hiddenDictionaryUnplaced = currentPuzzle.unplaced.filter((word) => word.source === 'dictionary').length;
+  if (hiddenDictionaryUnplaced) items.push(`<li class="word-meta">${formatNumber(hiddenDictionaryUnplaced)} nicht passende Datenbank-Füllkandidaten wurden ausgeblendet, weil sie für die Themenkontrolle nicht wichtig sind.</li>`);
+  if (!items.length) items.push('<li>Keine Hinweise. Alle verarbeiteten Themenwörter wurden platziert oder es gab keine Themenwörter.</li>');
   els.unplacedList.innerHTML = items.join('');
+}
+
+function getThemeUnplacedWords(puzzle) {
+  if (!puzzle || !Array.isArray(puzzle.unplaced)) return [];
+  return puzzle.unplaced.filter((word) => word.source !== 'dictionary');
 }
 
 
@@ -1711,7 +1718,7 @@ function updateButtons(enabled) {
 function createPuzzle() {
   const settings = getSettings();
   if (!hasDictionary() && !settings.wordText.trim() && !settings.seedAcross.trim() && !settings.seedDown.trim()) {
-    setMessages([{ type: 'error', text: 'Bitte lade ein Wörterbuch, gib Zusatzwörter ein oder trage ein Leitwort ein.' }]);
+    setMessages([{ type: 'error', text: 'Bitte lade ein Wörterbuch, gib Themenwörter ein oder trage ein Leitwort ein.' }]);
     return;
   }
 
@@ -1720,11 +1727,13 @@ function createPuzzle() {
   currentView = 'empty';
   const used = getUsedCells(currentPuzzle.grid).length;
   const placedCount = currentPuzzle.placed.length;
-  const unplacedCount = currentPuzzle.unplaced.length;
-  els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
+  const themeUnplacedCount = getThemeUnplacedWords(currentPuzzle).length;
+  const dictionaryUnplacedCount = currentPuzzle.unplaced.filter((word) => word.source === 'dictionary').length;
+  els.stats.textContent = `${placedCount} Wörter platziert, ${themeUnplacedCount} Themenwörter nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
-    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.5.0 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(themeUnplacedCount ? [{ text: `${themeUnplacedCount} Themenwörter konnten nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(!themeUnplacedCount && dictionaryUnplacedCount ? [{ text: `Nicht passende Datenbank-Füllkandidaten wurden ausgeblendet. Wichtig sind unten nur Deine Themenwörter.` }] : []),
   ]);
   updateButtons(Boolean(placedCount));
   saveState();
@@ -1744,9 +1753,10 @@ function buildSolutionsText(puzzle) {
   lines.push('Senkrecht');
   down.forEach((entry) => lines.push(`${entry.number}. ${entry.value}`));
   lines.push('');
-  lines.push('Nicht platziert');
-  if (puzzle.unplaced.length) {
-    puzzle.unplaced.forEach((word) => lines.push(`- ${word.grid}: ${word.reason}`));
+  lines.push('Nicht platzierte Themenwörter');
+  const themeUnplaced = getThemeUnplacedWords(puzzle);
+  if (themeUnplaced.length) {
+    themeUnplaced.forEach((word) => lines.push(`- ${word.grid}: ${word.reason}`));
   } else {
     lines.push('- keine');
   }
@@ -2211,5 +2221,5 @@ loadState();
 renderPersonalDictionaryUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.5.0. Der deutsche Vollfundus ist aktiv, und Dein persönlicher Wortschatz unterstützt jetzt Mehrfachlisten.' }]);
+  setMessages([{ text: 'Bereit für v0.5.1. Persönliche Listen stehen als Themenbasis im Mittelpunkt; der deutsche Vollfundus arbeitet als Datenbank-Füllfundus im Hintergrund.' }]);
 });
