@@ -1,8 +1,8 @@
 'use strict';
 
-const VERSION = '0.5.2';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.5.2.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.5.3';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.5.3.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
@@ -883,8 +883,8 @@ function getBlockedGridSet(text = '') {
 
 function getWordFormModeLabel(mode) {
   if (mode === 'all') return 'alle Wörterbuchformen';
-  if (mode === 'strict') return 'streng basisnah';
-  return 'basisnah';
+  if (mode === 'strict') return 'streng: möglichst nur Singular/Grundform';
+  return 'Grundformen + Substantiv-Mehrzahl';
 }
 
 function getWordTypeWeights(settings = getSettings()) {
@@ -1054,33 +1054,57 @@ function likelyInflectedVerb(grid, originalLower) {
   return false;
 }
 
-function isLikelyInflectedEntry(entry, mode = 'basic') {
-  if (!entry || mode === 'all') return false;
+
+function likelyGenitiveNoun(grid) {
+  if (!grid || grid.length <= 3) return false;
+  if (grid.endsWith('ES') && grid.length > 4 && dictionaryIndex.has(grid.slice(0, -2))) return true;
+  if (grid.endsWith('S') && grid.length > 3 && dictionaryIndex.has(grid.slice(0, -1))) return true;
+  return false;
+}
+
+function likelyBaseVerb(grid, originalLower) {
+  if (!grid || !originalLower) return false;
+  if (likelyInflectedVerb(grid, originalLower)) return false;
+  return /(ieren|eln|ern|en|n)$/.test(originalLower);
+}
+
+function likelyBaseAdjective(grid, originalLower) {
+  if (!grid || !originalLower) return false;
+  if (likelyInflectedAdjective(grid)) return false;
+  if (/(erem|eren|erer|eres|ere|stem|sten|ster|stes|ste|em|en|es)$/.test(originalLower)) return false;
+  if (/(bar|haft|ig|isch|lich|los|sam|weise|artig|förmig|foermig|reich|arm|voll|leer|nah|fern|weit|weitig|malig|al|ell|iv|ös|oes|ant|ent)$/.test(originalLower)) return true;
+  return classifyWordType({ original: originalLower, grid }) === 'adjective';
+}
+
+function isAllowedDatabaseBaseForm(entry, mode = 'basic') {
+  if (!entry || mode === 'all') return true;
   const original = String(entry.original || entry.grid || '');
   const grid = entry.grid || normalizeWord(original).grid;
-  if (!grid || grid.length <= 2) return false;
+  if (!grid || grid.length <= 2) return true;
 
   const originalLower = original.toLocaleLowerCase('de-DE');
   const startsUpper = /^[A-ZÄÖÜẞ]/.test(original);
   const startsLower = /^[a-zäöüß]/.test(original);
 
-  if (startsLower) {
-    if (likelyInflectedVerb(grid, originalLower)) return true;
-    if (likelyInflectedAdjective(grid)) return true;
-    if (mode === 'strict' && /(e|em|en|er|es|st|t|te|ten|test|tet|end|ende|endem|enden|ender|endes)$/.test(originalLower)) {
-      const baseLikeEndings = /(bar|haft|ig|isch|lich|los|sam|weise|mal|wärts|seits|fern|nah|lang|hoch|tief|voll|leer)$/;
-      return !baseLikeEndings.test(originalLower);
-    }
-    return false;
-  }
-
   if (startsUpper) {
-    if (likelyInflectedNoun(grid)) return true;
-    if (mode === 'strict' && /(innen|ern|en|es|s)$/.test(originalLower) && grid.length > 4) return true;
-    return false;
+    if (mode === 'strict') return !likelyInflectedNoun(grid) && !likelyGenitiveNoun(grid);
+    return !likelyGenitiveNoun(grid);
   }
 
-  return false;
+  if (startsLower) {
+    const type = classifyWordType(entry);
+    if (type === 'verb') return likelyBaseVerb(grid, originalLower);
+    if (type === 'adjective') return likelyBaseAdjective(grid, originalLower);
+    if (likelyInflectedVerb(grid, originalLower) || likelyInflectedAdjective(grid)) return false;
+    return true;
+  }
+
+  return true;
+}
+
+function isLikelyInflectedEntry(entry, mode = 'basic') {
+  if (!entry || mode === 'all') return false;
+  return !isAllowedDatabaseBaseForm(entry, mode);
 }
 
 function appendBlockedWord(rawWord) {
@@ -1123,7 +1147,7 @@ function updateDictionaryUi() {
     : '<br><span class="word-meta">Keine Zusatzliste importiert. Du kannst fremdsprachige oder eigene Wörter zusätzlich laden.</span>';
   const ambiguous = stats.ambiguousGridForms ? ` · ${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen erkannt` : '';
   const umlautless = stats.umlautlessVariantsSkipped ? ` · ${formatNumber(stats.umlautlessVariantsSkipped)} umlautlose Parallelformen entfernt` : '';
-  const filterInfo = `<br><span class="word-meta">Aktiver Wortformenfilter: ${escapeHtml(getWordFormModeLabel(settings.wordFormMode))} · Wortarten-Gewichtung ${escapeHtml(formatWordTypeWeights(settings))} · ${formatNumber(filteredCount)} Wörter als Hintergrund-Füllfundus nutzbar</span>`;
+  const filterInfo = `<br><span class="word-meta">Datenbank-Formen: ${escapeHtml(getWordFormModeLabel(settings.wordFormMode))} · Wortarten-Gewichtung ${escapeHtml(formatWordTypeWeights(settings))} · ${formatNumber(filteredCount)} Wörter als gefilterter Füllfundus nutzbar</span>`;
   els.dictionaryStatus.innerHTML = `
     <strong>${escapeHtml(dictionaryState.sourceName)}</strong><br>
     ${formatNumber(stats.usable)} nutzbare Wörter verfügbar · davon ${formatNumber(dictionaryState.builtInCount)} eingebaut · ${formatNumber(stats.tooShort)} sehr kurze Wörter ausgeschlossen${escapeHtml(ambiguous)}${escapeHtml(umlautless)}
@@ -2313,12 +2337,12 @@ if (els.blockedWordsInput) {
 }
 
 els.generateButton.addEventListener('click', () => createPuzzle(true));
-els.exampleButton.addEventListener('click', () => {
+if (els.exampleButton) els.exampleButton.addEventListener('click', () => {
   els.wordInput.value = examples.join('\n');
   els.seedAcross.value = 'Katalysator';
   els.seedDown.value = 'Kognition';
   saveState();
-  setMessages([{ text: 'Beispielwörter und zwei Leitwörter wurden geladen.' }]);
+  setMessages([{ text: 'Testbeispiel wurde geladen: Das Themenfeld enthält Beispielwörter und zwei Leitwörter.' }]);
 });
 els.resetButton.addEventListener('click', resetState);
 
@@ -2439,5 +2463,5 @@ renderPersonalDictionaryUi();
 renderSafeVocabularyUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.5.2. Persönliche Listen stehen als Themenbasis im Mittelpunkt; der deutsche Vollfundus arbeitet als Datenbank-Füllfundus im Hintergrund.' }]);
+  setMessages([{ text: 'Bereit für v0.5.3. Persönliche Listen bilden die Themenbasis; der deutsche Vollfundus liefert gefilterte Grundformen als Füllmaterial.' }]);
 });

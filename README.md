@@ -1,18 +1,18 @@
-# Kreuzwortdrucker v0.5.2
+# Kreuzwortdrucker v0.5.3
 
 PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit großem deutschem Wortfundus, persönlichem Wortschatz, Fragenverwaltung und SVG-/TXT-/CSV-Export.
 
-## Neu in v0.5.2
+## Neu in v0.5.3
 
-- **Max. Wörter** wurde zu **Max. Füllwörter** umbenannt. Die Grenze gilt nur noch für Wörter aus dem Hintergrund-/Basiswortschatz. Themenwörter aus der persönlichen Liste werden nicht mehr durch diese Zahl abgeschnitten.
-- **Rätsel aus Liste erstellen** nutzt zuerst nur die ausgewählte persönliche Liste. Es werden noch keine Datenbank-Füllwörter ergänzt.
-- **Rätsel erstellen / Lücken füllen** darf zusätzlich den gesicherten Wortschatz und den großen Basiswortschatz als Füllmaterial verwenden.
-- Leitwörter können per Vorschlagsliste aus der aktuell ausgewählten persönlichen Liste ausgewählt werden. Frei eingegebene Leitwörter können direkt in der aktuellen Liste gespeichert werden.
-- Die ausgewählte persönliche Liste wird direkt in der Oberfläche angezeigt und kann durchsucht werden.
-- Der Button **Wort hinzufügen** sitzt jetzt direkt unter dem Eingabefeld.
-- JSON-Sicherung wurde verständlicher benannt: Sie sichert persönlichen Wortschatz, Listen, Sperrungen und gesicherten Wortschatz.
-- Neuer Bereich **Gesicherter Wortschatz**: bereits verwendete oder bewusst als sicher markierte Wörter werden lokal gespeichert und beim Füllen bevorzugt vor dem großen Basiswortschatz verwendet.
-- Datenbank-Zufallswörter werden nicht mehr als Themenwörter in das Eingabefeld gekippt. Der große Fundus bleibt Füllmaterial im Hintergrund.
+- Der Button **„Beispiel laden“** wurde aus der Hauptaktion entfernt und als **„Testbeispiel laden“** in einen eigenen Bereich **„Testdaten“** verschoben.
+- Der Datenbank-Wortschatz ist standardmäßig stärker gefiltert:
+  - Substantive sind als Grundform und Mehrzahl erlaubt.
+  - Adjektive werden möglichst nur ungebeugt verwendet.
+  - Verben werden möglichst nur als Grundform/Infinitiv verwendet.
+  - Genitivformen wie „Aales“ oder „Abbaus“ werden im Standardmodus vermieden.
+- Die Oberfläche spricht jetzt von **Datenbank-Formen** statt allgemein von Wortformen, weil der Filter nur für den Hintergrund-Füllfundus gilt.
+- Persönliche Wörter und gesicherte Wörter bleiben bewusst unverändert, damit eigene Themenwörter, englische Wörter oder manuell geprüfte Begriffe nicht weggefiltert werden.
+- Die bestehende Zwei-Schritt-Logik aus v0.5.2 bleibt erhalten: **Rätsel aus Liste erstellen** nutzt nur Themenwörter, **Rätsel erstellen / Lücken füllen** ergänzt Füllwörter.
 
 ## Bereits enthalten
 
@@ -76,4 +76,4 @@ Vor dem Löschen von Website-Daten bitte den persönlichen Wortschatz als JSON e
 
 ## Hinweis zur nächsten Generatorstufe
 
-v0.5.2 trennt die Bedienlogik erstmals sichtbar in zwei Schritte: Themenliste platzieren und danach optional mit gesichertem/Basiswortschatz füllen. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.
+v0.5.3 trennt die Bedienlogik erstmals sichtbar in zwei Schritte: Themenliste platzieren und danach optional mit gesichertem/Basiswortschatz füllen. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.
