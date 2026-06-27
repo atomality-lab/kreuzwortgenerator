@@ -1,9 +1,9 @@
 'use strict';
 
-const VERSION = '0.3.1';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.3.1.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
-const DB_NAME = 'kreuzwortdrucker-db-v0-3-1';
+const VERSION = '0.3.2';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.3.2.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const DB_NAME = 'kreuzwortdrucker-db-v0-3-2';
 const DB_STORE = 'kv';
 
 const els = {
@@ -17,6 +17,7 @@ const els = {
   cellSize: document.querySelector('#cellSize'),
   baseName: document.querySelector('#baseName'),
   wordInput: document.querySelector('#wordInput'),
+  blockedWordsInput: document.querySelector('#blockedWordsInput'),
   dictionaryFile: document.querySelector('#dictionaryFile'),
   fillFromDictionary: document.querySelector('#fillFromDictionary'),
   clearDictionary: document.querySelector('#clearDictionary'),
@@ -155,7 +156,7 @@ function analyzeDictionaryText(text, sourceName, minImportLength = 3) {
 
 function createBuiltInDictionaryState() {
   const builtInWords = Array.isArray(window.KW_BUILTIN_DE_WORDS) ? window.KW_BUILTIN_DE_WORDS : [];
-  return analyzeDictionaryText(builtInWords.join('\n'), 'Eingebaute deutsche Basis-Wortliste', 3);
+  return analyzeDictionaryText(builtInWords.join('\n'), 'Eingebauter deutscher Vollfundus', 2);
 }
 
 function refreshCombinedDictionary() {
@@ -166,9 +167,9 @@ function refreshCombinedDictionary() {
     ...importedEntries.map((entry) => entry.original || entry.grid).filter(Boolean),
   ];
   const sourceName = importedEntries.length
-    ? `Eingebaute Basisliste + ${importedDictionaryState.sourceName || 'Zusatzliste'}`
-    : 'Eingebaute deutsche Basis-Wortliste';
-  dictionaryState = analyzeDictionaryText(combinedWords.join('\n'), sourceName, 3);
+    ? `Eingebauter Vollfundus + ${importedDictionaryState.sourceName || 'Zusatzliste'}`
+    : 'Eingebauter deutscher Vollfundus';
+  dictionaryState = analyzeDictionaryText(combinedWords.join('\n'), sourceName, 2);
   dictionaryState.builtInCount = builtIn.entries.length;
   dictionaryState.importedCount = importedEntries.length;
   dictionaryState.importSourceName = importedDictionaryState.sourceName || '';
@@ -271,6 +272,31 @@ function formatNumber(value) {
   return Number(value || 0).toLocaleString('de-DE');
 }
 
+function getBlockedGridSet(text = '') {
+  const set = new Set();
+  String(text || '')
+    .split(/[\n,;]+/)
+    .map((part) => normalizeWord(part).grid)
+    .filter(Boolean)
+    .forEach((grid) => set.add(grid));
+  return set;
+}
+
+function appendBlockedWord(rawWord) {
+  const clean = normalizeWord(rawWord);
+  if (!clean.grid || !els.blockedWordsInput) return;
+  const existing = getBlockedGridSet(els.blockedWordsInput.value);
+  if (existing.has(clean.grid)) {
+    setMessages([{ text: `${clean.grid} ist bereits als „nicht verwenden“ markiert.` }]);
+    return;
+  }
+  const current = els.blockedWordsInput.value.trim();
+  els.blockedWordsInput.value = current ? `${current}\n${clean.grid}` : clean.grid;
+  saveState();
+  setMessages([{ type: 'ok', text: `${clean.grid} wird künftig ausgeschlossen. Das Rätsel wurde neu erzeugt.` }]);
+  createPuzzle();
+}
+
 function updateDictionaryUi() {
   if (!els.dictionaryStatus) return;
   const enabled = hasDictionary();
@@ -295,20 +321,43 @@ function updateDictionaryUi() {
   renderDictionaryResults();
 }
 
-function getFilteredDictionaryEntries(settings = getSettings()) {
+function getFilteredDictionaryEntries(settings = getSettings(), extraExcluded = new Set()) {
   const maxLength = Math.max(settings.width, settings.height);
-  return dictionaryState.entries.filter((entry) => entry.length >= settings.minLength && entry.length <= maxLength);
+  const blocked = getBlockedGridSet(settings.blockedWordsText || '');
+  return dictionaryState.entries.filter((entry) => entry.length >= settings.minLength
+    && entry.length <= maxLength
+    && !blocked.has(entry.grid)
+    && !extraExcluded.has(entry.grid));
 }
 
-function pickDictionaryWords(settings = getSettings()) {
-  const candidates = getFilteredDictionaryEntries(settings);
-  const target = Math.min(candidates.length, settings.maxWords);
-  const scored = candidates.map((entry) => ({
+function pickDictionaryWords(settings = getSettings(), extraExcluded = new Set(), targetCount = settings.maxWords) {
+  const maxLength = Math.max(settings.width, settings.height);
+  const blocked = getBlockedGridSet(settings.blockedWordsText || '');
+  const sampleTarget = Math.min(Math.max(targetCount, settings.maxWords * 8, 250), 1200);
+  const sampled = [];
+  let checked = 0;
+
+  dictionaryState.entries.forEach((entry) => {
+    if (entry.length < settings.minLength || entry.length > maxLength) return;
+    if (blocked.has(entry.grid) || extraExcluded.has(entry.grid)) return;
+    checked += 1;
+    if (sampled.length < sampleTarget) {
+      sampled.push(entry);
+      return;
+    }
+    const replaceIndex = Math.floor(Math.random() * checked);
+    if (replaceIndex < sampleTarget) sampled[replaceIndex] = entry;
+  });
+
+  const idealLength = Math.min(Math.max(settings.minLength + 3, 7), Math.max(8, Math.min(maxLength, 12)));
+  const scored = sampled.map((entry) => ({
     entry,
-    score: Math.random() * 100 + Math.min(entry.length, 14) * 6,
+    score: Math.random() * 100 + Math.max(0, 90 - Math.abs(entry.length - idealLength) * 9) + Math.min(entry.length, 10) * 2,
   }));
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, target).map((item) => item.entry).sort((a, b) => b.length - a.length || a.grid.localeCompare(b.grid, 'de'));
+  const words = scored.map((item) => item.entry);
+  words.checkedDictionaryEntries = checked;
+  return words;
 }
 
 function renderDictionaryResults() {
@@ -358,7 +407,7 @@ async function importDictionaryFile(file) {
   updateDictionaryUi();
   const stats = importedDictionaryState.stats || {};
   setMessages([
-    { type: 'ok', text: `Zusatzliste importiert: ${formatNumber(stats.usable)} Wörter wurden zur eingebauten Basisliste ergänzt.` },
+    { type: 'ok', text: `Zusatzliste importiert: ${formatNumber(stats.usable)} Wörter wurden zur eingebauten Vollfundus ergänzt.` },
     ...(stats.ambiguousGridForms ? [{ text: `${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen wurden in der Zusatzliste erkannt, z. B. MASSE aus unterschiedlichen Originalwörtern. Für das Rätsel wird jeweils eine bevorzugte Form verwendet.` }] : []),
   ]);
 }
@@ -415,6 +464,52 @@ function parseWords(text, minLength, maxWords, seeds) {
     words: normalized.slice(0, maxWords),
     issues,
     skippedByLimit: Math.max(0, normalized.length - maxWords),
+  };
+}
+
+function buildGenerationWords(options) {
+  const maxLength = Math.max(options.width, options.height);
+  const blocked = getBlockedGridSet(options.blockedWordsText || '');
+  const manual = parseWords(options.wordText, options.minLength, 10000, {
+    across: options.seedAcross,
+    down: options.seedDown,
+  });
+  const issues = [...manual.issues];
+  const seen = new Set();
+  const words = [];
+
+  manual.words.forEach((word) => {
+    if (blocked.has(word.grid)) {
+      issues.push(`${word.original}: als „nicht verwenden“ markiert.`);
+      return;
+    }
+    if (word.grid.length > maxLength) {
+      issues.push(`${word.original}: länger als Breite und Höhe des Formats.`);
+      return;
+    }
+    if (!seen.has(word.grid)) {
+      seen.add(word.grid);
+      words.push(word);
+    }
+  });
+
+  if (hasDictionary()) {
+    const targetPool = Math.max(options.maxWords * 10, 300);
+    const picked = pickDictionaryWords(options, seen, targetPool);
+    picked.forEach((entry) => {
+      if (!seen.has(entry.grid)) {
+        seen.add(entry.grid);
+        words.push({ original: entry.original, grid: entry.grid, source: 'dictionary' });
+      }
+    });
+  } else if (!words.length) {
+    issues.push('Kein Wörterbuch verfügbar und keine Zusatz-/Leitwörter eingetragen.');
+  }
+
+  return {
+    words,
+    issues,
+    skippedByLimit: Math.max(0, words.length - Math.max(options.maxWords * 10, 300)),
   };
 }
 
@@ -669,10 +764,7 @@ function findPlacedWordForEntry(puzzle, entry) {
 
 function generatePuzzle(options) {
   const grid = makeEmptyGrid(options.width, options.height);
-  const { words, issues, skippedByLimit } = parseWords(options.wordText, options.minLength, options.maxWords, {
-    across: options.seedAcross,
-    down: options.seedDown,
-  });
+  const { words, issues, skippedByLimit } = buildGenerationWords(options);
   const unplaced = [];
   let placed = tryPlaceSeeds(grid, words, options.width, options.height, options.seedAcross, options.seedDown);
   const placedGrids = new Set(placed.map((word) => word.grid));
@@ -689,6 +781,7 @@ function generatePuzzle(options) {
   }
 
   for (const word of words) {
+    if (placed.length >= options.maxWords) break;
     if (placedGrids.has(word.grid)) continue;
     if (word.grid.length > Math.max(options.width, options.height)) {
       unplaced.push({ ...word, reason: 'länger als Breite und Höhe des Formats' });
@@ -827,14 +920,15 @@ function renderLists() {
   if (!currentPuzzle) return;
   const across = currentPuzzle.entries.filter((entry) => entry.direction === 'across');
   const down = currentPuzzle.entries.filter((entry) => entry.direction === 'down');
-  els.acrossList.innerHTML = across.map((entry) => `<li value="${entry.number}"><strong>${escapeHtml(entry.value)}</strong> <span class="word-meta">(${entry.length})</span></li>`).join('');
-  els.downList.innerHTML = down.map((entry) => `<li value="${entry.number}"><strong>${escapeHtml(entry.value)}</strong> <span class="word-meta">(${entry.length})</span></li>`).join('');
+  const itemHtml = (entry) => `<li value="${entry.number}"><strong>${escapeHtml(entry.value)}</strong> <span class="word-meta">(${entry.length})</span> <button class="mini ghost" type="button" data-block-word="${escapeHtml(entry.value)}">nicht verwenden</button></li>`;
+  els.acrossList.innerHTML = across.map(itemHtml).join('');
+  els.downList.innerHTML = down.map(itemHtml).join('');
 
   const items = [];
   currentPuzzle.parseIssues.forEach((issue) => items.push(`<li>${escapeHtml(issue)}</li>`));
   currentPuzzle.unplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
   if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Wörter wegen Maximalgrenze nicht verarbeitet.</li>`);
-  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.3.1 sauber erzeugt.</li>');
+  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.3.2 sauber erzeugt.</li>');
   els.unplacedList.innerHTML = items.join('');
 }
 
@@ -905,6 +999,7 @@ function getSettings() {
     cellSize: clampNumber(els.cellSize.value, 20, 120, 42),
     baseName: sanitizeFileBase(els.baseName.value || 'raetsel_001'),
     wordText: els.wordInput.value,
+    blockedWordsText: els.blockedWordsInput ? els.blockedWordsInput.value : '',
   };
 }
 
@@ -925,14 +1020,10 @@ function updateButtons(enabled) {
 }
 
 function createPuzzle() {
-  let settings = getSettings();
-  if (!settings.wordText.trim() && !settings.seedAcross.trim() && !settings.seedDown.trim()) {
-    if (hasDictionary() && fillWordInputFromDictionary()) {
-      settings = getSettings();
-    } else {
-      setMessages([{ type: 'error', text: 'Bitte gib Wörter ein, nutze die eingebaute Wortliste oder trage ein Leitwort ein.' }]);
-      return;
-    }
+  const settings = getSettings();
+  if (!hasDictionary() && !settings.wordText.trim() && !settings.seedAcross.trim() && !settings.seedDown.trim()) {
+    setMessages([{ type: 'error', text: 'Bitte lade ein Wörterbuch, gib Zusatzwörter ein oder trage ein Leitwort ein.' }]);
+    return;
   }
 
   const existingClues = collectCurrentClues();
@@ -944,7 +1035,7 @@ function createPuzzle() {
   els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Ausgabeformat: ${settings.width} × ${settings.height}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
-    ...(unplacedCount ? [{ text: `${unplacedCount} Wörter konnten in v0.3.1 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.3.2 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
   ]);
   updateButtons(Boolean(placedCount));
   saveState();
@@ -1052,6 +1143,7 @@ function saveState() {
       cellSize: els.cellSize.value,
       baseName: els.baseName.value,
       wordInput: els.wordInput.value,
+      blockedWordsInput: els.blockedWordsInput ? els.blockedWordsInput.value : '',
       dictionarySearch: els.dictionarySearch ? els.dictionarySearch.value : '',
     },
     clueBank,
@@ -1094,7 +1186,8 @@ function resetState() {
   els.cropToContent.checked = true;
   els.cellSize.value = '42';
   els.baseName.value = 'raetsel_001';
-  els.wordInput.value = examples.join('\n');
+  els.wordInput.value = '';
+  if (els.blockedWordsInput) els.blockedWordsInput.value = '';
   if (els.dictionarySearch) els.dictionarySearch.value = '';
   currentPuzzle = null;
   currentView = 'empty';
@@ -1109,7 +1202,7 @@ function resetState() {
   els.downClues.textContent = 'Nach dem Erstellen erscheinen hier die Fragenfelder.';
   els.acrossClues.classList.add('empty-clue-list');
   els.downClues.classList.add('empty-clue-list');
-  setMessages([{ text: 'Zurückgesetzt. Beispielwörter sind wieder geladen; eine importierte Zusatzliste bleibt erhalten.' }]);
+  setMessages([{ text: 'Zurückgesetzt. Der eingebaute Vollfundus bleibt aktiv; eine importierte Zusatzliste bleibt erhalten.' }]);
 }
 
 
@@ -1139,7 +1232,7 @@ if (els.clearDictionary) {
     refreshCombinedDictionary();
     updateDictionaryUi();
     saveState();
-    setMessages([{ type: 'ok', text: 'Zusatzliste entfernt. Die eingebaute deutsche Basisliste bleibt aktiv.' }]);
+    setMessages([{ type: 'ok', text: 'Zusatzliste entfernt. Die eingebaute deutsche Vollfundus-Liste bleibt aktiv.' }]);
   });
 }
 
@@ -1157,6 +1250,13 @@ if (els.dictionarySearch) {
   });
 });
 
+if (els.blockedWordsInput) {
+  els.blockedWordsInput.addEventListener('input', () => {
+    renderDictionaryResults();
+    saveState();
+  });
+}
+
 els.generateButton.addEventListener('click', createPuzzle);
 els.exampleButton.addEventListener('click', () => {
   els.wordInput.value = examples.join('\n');
@@ -1166,6 +1266,14 @@ els.exampleButton.addEventListener('click', () => {
   setMessages([{ text: 'Beispielwörter und zwei Leitwörter wurden geladen.' }]);
 });
 els.resetButton.addEventListener('click', resetState);
+
+[els.acrossList, els.downList].forEach((list) => {
+  list.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-block-word]');
+    if (!button) return;
+    appendBlockedWord(button.dataset.blockWord);
+  });
+});
 
 els.emptyViewButton.addEventListener('click', () => {
   currentView = 'empty';
@@ -1272,5 +1380,5 @@ if ('serviceWorker' in navigator) {
 loadState();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.3.1. Die eingebaute deutsche Basisliste ist aktiv; TXT- oder DIC-Dateien kannst Du zusätzlich importieren.' }]);
+  setMessages([{ text: 'Bereit für v0.3.2. Der eingebaute deutsche Vollfundus ist aktiv; TXT- oder DIC-Dateien kannst Du zusätzlich importieren.' }]);
 });

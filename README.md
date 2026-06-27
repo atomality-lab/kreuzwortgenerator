@@ -1,14 +1,18 @@
-# Kreuzwortdrucker v0.3.1
+# Kreuzwortdrucker v0.3.2
 
-PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit eingebauter Basis-Wortliste, Zusatzimport, Fragenverwaltung und Export für Buchsatz/Canva.
+PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit eingebautem deutschem Vollfundus, Zusatzimport, Ausschlussliste, Fragenverwaltung und Export für Buchsatz/Canva.
 
-## Enthalten in v0.3.1
+## Enthalten in v0.3.2
 
 - PWA-Grundstruktur mit Manifest und Service Worker
 - einstellbares Zielformat, z. B. 22 × 15 Kästchen
-- Eingabe einer eigenen Wortliste
-- eingebaute deutsche Basis-Wortliste mit rund 800 handkuratierten Begriffen
-- Button „Wortliste aus Basisliste füllen“
+- Button „Rätsel erstellen“ erzeugt das Rätsel direkt aus dem eingebauten Wörterbuchfundus
+- eingebauter deutscher Vollfundus aus `@cspell/dict-de-de` 4.1.2 / de-DE_frami / igerman98
+- rund 759.000 normalisierte, deduplizierte Wörter im eingebauten Fundus
+- optionale Zusatz-/Wunschwörter im Textfeld
+- optionale Leitwörter waagrecht/senkrecht
+- optionale Liste „Nicht verwenden“ für Wörter, die ausgeschlossen werden sollen
+- in der Lösungsliste kann ein Wort mit „nicht verwenden“ gesperrt und das Rätsel direkt neu erzeugt werden
 - zusätzlicher Import lokaler Wortlisten als TXT oder einfache Hunspell-DIC-Dateien
 - Import bleibt als Ergänzung erhalten, z. B. für englische Wörter, Fremdwörter, Eigennamen oder Fachbegriffe
 - lokale Speicherung importierter Zusatzlisten im Browser über IndexedDB
@@ -16,19 +20,15 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit eingebauter Bas
 - Wörterbuch-Normalisierung und Bereinigung:
   - Hunspell-Flags nach `/` werden entfernt
   - Leer-/Sonderzeichen werden bereinigt
-  - sehr kurze Wörter unter 3 Buchstaben werden ausgeschlossen
   - die aktuelle Mindestwortlänge filtert die Auswahl für das Rätsel
-- Erkennung von Dubletten und mehrdeutigen Gitterformen
-  - Beispiel: „Masse“ und „Maße“ ergeben beide `MASSE`
-- interne Suche über eingebaute Basisliste plus importierte Zusatzliste
+- Erkennung von Dubletten und mehrdeutigen Gitterformen bei Import-/Zusatzlisten
+- interne Suche über eingebauten Vollfundus plus importierte Zusatzliste
 - einfacher Freiform-im-Format-Generator
-- Button „Rätsel erstellen“
-- optionale Leitwörter waagrecht/senkrecht als frühe Testfunktion
 - automatische Nummerierung
 - leere Rätselansicht
 - gelöste Rätselansicht
 - Lösungsliste waagrecht/senkrecht
-- Anzeige nicht platzierter Wörter und Hinweise
+- Anzeige nicht platzierter Kandidaten und Hinweise
 - Fragenverwaltung direkt unter dem Gitter:
   - getrennte Bereiche für Waagrecht und Senkrecht
   - Textfeld pro Nummer/Lösungswort
@@ -48,20 +48,22 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit eingebauter Bas
   - Projektstand inklusive Fragen
 - lokale Speicherung der letzten Eingaben und Fragen im Browser
 
-## Änderungen gegenüber v0.3.0
+## Änderungen gegenüber v0.3.1
 
-- Eine eingebaute deutsche Basis-Wortliste wird direkt mitgeliefert.
-- Die App ist sofort nutzbar, ohne dass zuerst ein externes Wörterbuch heruntergeladen werden muss.
-- Der bisherige Wörterbuchimport bleibt erhalten, arbeitet aber jetzt als Zusatzliste.
-- „Wörterbuch entfernen“ wurde zu „Zusatzliste entfernen“: Die eingebaute Basisliste bleibt immer aktiv.
-- Service-Worker-Cache und Versionsnummer wurden auf v0.3.1 erhöht.
+- Die kleine handkuratierte Startliste wurde durch einen großen eingebauten deutschen Wörterbuchfundus ersetzt.
+- „Rätsel erstellen“ benötigt keine vorher manuell zusammengestellte Wortliste mehr.
+- Das bisherige Wortfeld ist jetzt nur noch für Zusatz-/Wunschwörter gedacht.
+- Es gibt eine neue Ausschlussliste „Nicht verwenden“.
+- In der Lösungsliste können Wörter direkt gesperrt werden.
+- Der Import bleibt erhalten, arbeitet aber als Zusatzliste.
+- Rechtliche Quellenhinweise wurden in `THIRD_PARTY_NOTICES.md` ergänzt.
+- Service-Worker-Cache und Versionsnummer wurden auf v0.3.2 erhöht.
 
 ## Noch nicht enthalten
 
-- große vollständige Hunspell-/igerman98-Wortliste als mitgelieferter Datenbestand
 - echte Kategorien wie Abkürzung, Fremdwort, Eigenname
 - gezielte Qualitätsbewertung der Wörter
-- automatische semantische Auswahl anspruchsvoller Wörter
+- Gewichtung nach Häufigkeit oder Verständlichkeit
 - XLSX-Export
 - PNG-Export
 - manuelle Nachbearbeitung einzelner Wörter im Gitter
@@ -73,11 +75,13 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit eingebauter Bas
 
 1. Ordner lokal über einen kleinen Webserver ausliefern.
 2. Mindestwortlänge, Format und maximale Wortanzahl einstellen.
-3. Optional „Wortliste aus Basisliste füllen“ klicken oder eigene Wörter eingeben.
-4. Optional eine TXT- oder DIC-Zusatzliste importieren.
-5. „Rätsel erstellen“ klicken.
-6. Unter dem Gitter Fragen zu den nummerierten Wörtern eintragen.
-7. Gitter, Lösung und Fragen exportieren.
+3. Optional Zusatz-/Wunschwörter oder Leitwörter eintragen.
+4. Optional Wörter unter „Nicht verwenden“ eintragen.
+5. Optional eine TXT- oder DIC-Zusatzliste importieren.
+6. „Rätsel erstellen“ klicken.
+7. Bei Bedarf Wörter in der Lösungsliste mit „nicht verwenden“ sperren und neu erzeugen lassen.
+8. Unter dem Gitter Fragen zu den nummerierten Wörtern eintragen.
+9. Gitter, Lösung und Fragen exportieren.
 
 Für PWA/Service-Worker-Funktion am besten über einen lokalen Webserver testen, z. B.:
 
@@ -93,12 +97,12 @@ http://localhost:8000
 
 ## Hinweise zur eingebauten Wortliste
 
-Die eingebaute Basisliste ist eine handkuratierte Startliste, damit der Kreuzwortdrucker sofort ohne externen Download nutzbar ist. Sie ist noch keine vollständige Rechtschreib- oder Kreuzworträtselwortliste. Für spätere Versionen kann diese Liste durch eine größere geprüfte Open-Source-Wortbasis ersetzt oder erweitert werden.
+Die eingebaute Liste wurde aus dem npm-Paket `@cspell/dict-de-de` Version 4.1.2 erzeugt. Das Paket basiert auf de-DE_frami / igerman98. Für die Kreuzwortnutzung wurde die Liste normalisiert und nach Gitterform dedupliziert. Wörter mit Umlauten oder ß werden im Gitter als AE/OE/UE/SS verarbeitet.
 
-Der Import bleibt bewusst erhalten. TXT-Dateien sollten ein Wort pro Zeile enthalten. Hunspell-DIC-Dateien werden einfach gelesen, wobei die erste Zählzeile und Flags nach `/` ignoriert werden. Affix-Regeln aus `.aff`-Dateien werden in v0.3.1 noch nicht ausgewertet.
+Weitere Hinweise stehen in `THIRD_PARTY_NOTICES.md` und `LICENSE-cspell-dict-de-de.txt`.
 
 ## Hinweise zum Generator
 
-Der Generator ist in v0.3.1 weiterhin bewusst einfach gehalten. Er sucht Kreuzungen zwischen den ausgewählten Wörtern und setzt nicht nutzbare Felder beim Export als schwarze Felder. Nicht platzierbare Wörter werden angezeigt.
+Der Generator ist in v0.3.2 weiterhin bewusst einfach gehalten. Er zieht Kandidaten aus dem großen Wörterbuchfundus, sucht Kreuzungen und setzt nicht genutzte Felder beim Export als schwarze Felder. Nicht platzierbare Kandidaten werden angezeigt.
 
 Die Wortlistenfunktion ist die Grundlage für spätere Versionen mit Wortqualität, Kategorien, Abkürzungsfiltern und besserer automatischer Auswahl.

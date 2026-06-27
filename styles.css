@@ -587,3 +587,10 @@ summary {
     grid-template-columns: 1fr;
   }
 }
+
+button.mini {
+  padding: 0.25rem 0.45rem;
+  font-size: 0.75rem;
+  border-radius: 0.45rem;
+  margin-left: 0.35rem;
+}
