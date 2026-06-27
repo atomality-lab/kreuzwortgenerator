@@ -1,13 +1,24 @@
-# Kreuzwortdrucker v0.2.0
+# Kreuzwortdrucker v0.3.0
 
 PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit Export für Buchsatz/Canva.
 
-## Enthalten in v0.2.0
+## Enthalten in v0.3.0
 
 - PWA-Grundstruktur mit Manifest und Service Worker
 - einstellbares Zielformat, z. B. 22 × 15 Kästchen
 - Eingabe einer eigenen Wortliste
+- Import lokaler Open-Source-Wortlisten als TXT oder Hunspell-DIC
+- lokale Speicherung des importierten Wörterbuchs im Browser über IndexedDB
 - automatische Umschrift: Ä → AE, Ö → OE, Ü → UE, ß → SS
+- Wörterbuch-Normalisierung und Bereinigung:
+  - Hunspell-Flags nach `/` werden entfernt
+  - Leer-/Sonderzeichen werden bereinigt
+  - sehr kurze Wörter unter 3 Buchstaben werden beim Import ausgeschlossen
+  - die aktuelle Mindestwortlänge filtert die Auswahl für das Rätsel
+- Erkennung von Dubletten und mehrdeutigen Gitterformen
+  - Beispiel: „Masse“ und „Maße“ ergeben beide `MASSE`
+- interne Wörterbuchsuche mit Filter nach aktueller Mindestlänge und Formatgröße
+- Button „Wortliste aus Wörterbuch füllen“
 - einfacher Freiform-im-Format-Generator
 - Button „Rätsel erstellen“
 - optionale Leitwörter waagrecht/senkrecht als frühe Testfunktion
@@ -22,6 +33,7 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit Export für Buc
   - Anzeige von Originalwort, Gitterwort und Wortlänge
   - Status „Frage fehlt“ / „Frage eingetragen“
   - Fragen bleiben lokal im Browser gespeichert und werden möglichst über Richtung + Lösungswort wieder zugeordnet
+- Exportbereich direkt unter dem Gitter
 - Export als SVG:
   - leeres Gitter
   - gelöstes Gitter
@@ -36,8 +48,9 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit Export für Buc
 
 ## Noch nicht enthalten
 
-- Wörterbuchimport
 - echte Kategorien wie Abkürzung, Fremdwort, Eigenname
+- gezielte Qualitätsbewertung der Wörter
+- automatische semantische Auswahl anspruchsvoller Wörter
 - XLSX-Export
 - PNG-Export
 - manuelle Nachbearbeitung einzelner Wörter im Gitter
@@ -47,13 +60,13 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit Export für Buc
 
 ## Nutzung
 
-1. `index.html` im Browser öffnen oder den Ordner lokal über einen kleinen Webserver ausliefern.
-2. Wörter eingeben oder Beispiel laden.
-3. Format einstellen.
-4. „Rätsel erstellen“ klicken.
-5. Unter dem Gitter Fragen zu den nummerierten Wörtern eintragen.
-6. Leeres oder gelöstes Gitter als SVG exportieren.
-7. Fragen als TXT oder CSV exportieren.
+1. Ordner lokal über einen kleinen Webserver ausliefern.
+2. Optional eine TXT- oder DIC-Wortliste importieren.
+3. Mindestwortlänge, Format und maximale Wortanzahl einstellen.
+4. Optional „Wortliste aus Wörterbuch füllen“ klicken oder eigene Wörter eingeben.
+5. „Rätsel erstellen“ klicken.
+6. Unter dem Gitter Fragen zu den nummerierten Wörtern eintragen.
+7. Gitter, Lösung und Fragen exportieren.
 
 Für PWA/Service-Worker-Funktion am besten über einen lokalen Webserver testen, z. B.:
 
@@ -67,10 +80,14 @@ Dann im Browser öffnen:
 http://localhost:8000
 ```
 
+## Hinweise zum Wörterbuch
+
+Das Programm liefert bewusst keine große Wortliste mit. Importiere nur Wortlisten, deren Lizenz für Deinen Zweck passt. Der Import läuft lokal im Browser; die Wörter werden nicht an einen Server übertragen.
+
+TXT-Dateien sollten ein Wort pro Zeile enthalten. Hunspell-DIC-Dateien werden einfach gelesen, wobei die erste Zählzeile und Flags nach `/` ignoriert werden. Affix-Regeln aus `.aff`-Dateien werden in v0.3.0 noch nicht ausgewertet.
+
 ## Hinweise zum Generator
 
-Der Generator ist in v0.2.0 weiterhin bewusst einfach gehalten. Er sucht Kreuzungen zwischen den eingegebenen Wörtern und setzt nicht nutzbare Felder beim Export als schwarze Felder. Nicht platzierbare Wörter werden angezeigt.
+Der Generator ist in v0.3.0 weiterhin bewusst einfach gehalten. Er sucht Kreuzungen zwischen den ausgewählten Wörtern und setzt nicht nutzbare Felder beim Export als schwarze Felder. Nicht platzierbare Wörter werden angezeigt.
 
-Die neue Fragenverwaltung ist bereits auf den späteren Buchsatz ausgerichtet: Das Gitter kann separat exportiert werden, die Fragen können als Text oder CSV in Canva, Excel oder ein anderes Satzprogramm übernommen werden.
-
-Für die nächsten Versionen ist der Ausbau in Richtung Wörterbuch, Qualitätsfilter, PNG-Export, Projektimport und komfortablere Nachbearbeitung vorgesehen.
+Die Wörterbuchfunktion ist die Grundlage für spätere Versionen mit Wortqualität, Kategorien, Abkürzungsfiltern und besserer automatischer Auswahl.

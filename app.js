@@ -1,8 +1,10 @@
 'use strict';
 
-const VERSION = '0.2.0';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.2.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.3.0';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.3.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const DB_NAME = 'kreuzwortdrucker-db-v0-3';
+const DB_STORE = 'kv';
 
 const els = {
   gridWidth: document.querySelector('#gridWidth'),
@@ -15,6 +17,12 @@ const els = {
   cellSize: document.querySelector('#cellSize'),
   baseName: document.querySelector('#baseName'),
   wordInput: document.querySelector('#wordInput'),
+  dictionaryFile: document.querySelector('#dictionaryFile'),
+  fillFromDictionary: document.querySelector('#fillFromDictionary'),
+  clearDictionary: document.querySelector('#clearDictionary'),
+  dictionaryStatus: document.querySelector('#dictionaryStatus'),
+  dictionarySearch: document.querySelector('#dictionarySearch'),
+  dictionaryResults: document.querySelector('#dictionaryResults'),
   generateButton: document.querySelector('#generateButton'),
   exampleButton: document.querySelector('#exampleButton'),
   resetButton: document.querySelector('#resetButton'),
@@ -50,6 +58,8 @@ let currentPuzzle = null;
 let currentView = 'empty';
 let deferredInstallPrompt = null;
 let clueBank = {};
+let dictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [] };
+let dictionaryIndex = new Map();
 
 function normalizeWord(raw) {
   const original = String(raw || '').trim();
@@ -64,6 +74,265 @@ function normalizeWord(raw) {
     .replace(/[\s\-–—_]+/g, '')
     .replace(/[^A-Z]/g, '');
   return { original, grid };
+}
+
+
+function extractDictionaryWord(line, index) {
+  let value = String(line || '').replace(/^\uFEFF/, '').trim();
+  if (!value || value.startsWith('#')) return '';
+  if (index === 0 && /^\d+$/.test(value)) return '';
+  value = value.split(/\s+/)[0] || '';
+  value = value.split('/')[0] || '';
+  return value.trim();
+}
+
+function analyzeDictionaryText(text, sourceName, minImportLength = 3) {
+  const lines = String(text || '').split(/\r?\n/);
+  const groups = new Map();
+  const stats = {
+    rawLines: lines.length,
+    usable: 0,
+    invalid: 0,
+    tooShort: 0,
+    duplicateLines: 0,
+    ambiguousGridForms: 0,
+    minImportLength,
+  };
+
+  lines.forEach((line, index) => {
+    const word = extractDictionaryWord(line, index);
+    if (!word) return;
+    const clean = normalizeWord(word);
+    if (!clean.grid) {
+      stats.invalid += 1;
+      return;
+    }
+    if (clean.grid.length < minImportLength) {
+      stats.tooShort += 1;
+      return;
+    }
+    if (!groups.has(clean.grid)) {
+      groups.set(clean.grid, {
+        grid: clean.grid,
+        preferred: { original: clean.original, grid: clean.grid, length: clean.grid.length, source: 'dictionary' },
+        originals: new Set([clean.original]),
+      });
+      return;
+    }
+    const group = groups.get(clean.grid);
+    if (group.originals.has(clean.original)) {
+      stats.duplicateLines += 1;
+    } else {
+      group.originals.add(clean.original);
+    }
+  });
+
+  const entries = [];
+  const ambiguousSample = [];
+  groups.forEach((group) => {
+    entries.push(group.preferred);
+    if (group.originals.size > 1) {
+      stats.ambiguousGridForms += 1;
+      if (ambiguousSample.length < 50) {
+        ambiguousSample.push({ grid: group.grid, originals: Array.from(group.originals).slice(0, 8) });
+      }
+    }
+  });
+
+  entries.sort((a, b) => b.length - a.length || a.grid.localeCompare(b.grid, 'de'));
+  stats.usable = entries.length;
+
+  return {
+    sourceName: sourceName || 'woerterbuch.txt',
+    importedAt: new Date().toISOString(),
+    minImportLength,
+    entries,
+    stats,
+    ambiguousSample,
+  };
+}
+
+function buildDictionaryIndex() {
+  dictionaryIndex = new Map();
+  dictionaryState.entries.forEach((entry) => dictionaryIndex.set(entry.grid, entry));
+}
+
+function hasDictionary() {
+  return Boolean(dictionaryState.entries && dictionaryState.entries.length);
+}
+
+function openDictionaryDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      resolve(null);
+      return;
+    }
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(DB_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveDictionaryToDb() {
+  const db = await openDictionaryDb();
+  if (!db) return;
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).put(dictionaryState, 'dictionary');
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+async function loadDictionaryFromDb() {
+  try {
+    const db = await openDictionaryDb();
+    if (!db) return;
+    const loaded = await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, 'readonly');
+      const request = tx.objectStore(DB_STORE).get('dictionary');
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    if (loaded && Array.isArray(loaded.entries)) {
+      dictionaryState = loaded;
+      buildDictionaryIndex();
+    }
+  } catch (error) {
+    console.warn('Wörterbuch konnte nicht geladen werden:', error);
+  }
+}
+
+async function clearDictionaryFromDb() {
+  try {
+    const db = await openDictionaryDb();
+    if (!db) return;
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).delete('dictionary');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch (error) {
+    console.warn('Wörterbuch konnte nicht gelöscht werden:', error);
+  }
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString('de-DE');
+}
+
+function updateDictionaryUi() {
+  if (!els.dictionaryStatus) return;
+  const enabled = hasDictionary();
+  els.fillFromDictionary.disabled = !enabled;
+  els.clearDictionary.disabled = !enabled;
+  els.dictionarySearch.disabled = !enabled;
+  if (!enabled) {
+    els.dictionaryStatus.textContent = 'Noch kein Wörterbuch importiert.';
+    els.dictionaryResults.textContent = 'Nach dem Import kannst Du hier Wörter suchen.';
+    els.dictionaryResults.classList.add('empty-clue-list');
+    return;
+  }
+  const stats = dictionaryState.stats || {};
+  const date = dictionaryState.importedAt ? new Date(dictionaryState.importedAt).toLocaleString('de-DE') : 'unbekannt';
+  const ambiguous = stats.ambiguousGridForms ? ` · ${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen erkannt` : '';
+  els.dictionaryStatus.innerHTML = `
+    <strong>${escapeHtml(dictionaryState.sourceName)}</strong><br>
+    ${formatNumber(stats.usable)} nutzbare Wörter importiert · ${formatNumber(stats.tooShort)} sehr kurze Wörter ausgeschlossen · ${formatNumber(stats.duplicateLines)} Dubletten übersprungen${escapeHtml(ambiguous)}<br>
+    <span class="word-meta">Import: ${escapeHtml(date)} · interne Suche aktiv</span>`;
+  renderDictionaryResults();
+}
+
+function getFilteredDictionaryEntries(settings = getSettings()) {
+  const maxLength = Math.max(settings.width, settings.height);
+  return dictionaryState.entries.filter((entry) => entry.length >= settings.minLength && entry.length <= maxLength);
+}
+
+function pickDictionaryWords(settings = getSettings()) {
+  const candidates = getFilteredDictionaryEntries(settings);
+  const target = Math.min(candidates.length, settings.maxWords);
+  const scored = candidates.map((entry) => ({
+    entry,
+    score: Math.random() * 100 + Math.min(entry.length, 14) * 6,
+  }));
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, target).map((item) => item.entry).sort((a, b) => b.length - a.length || a.grid.localeCompare(b.grid, 'de'));
+}
+
+function renderDictionaryResults() {
+  if (!els.dictionaryResults) return;
+  if (!hasDictionary()) {
+    els.dictionaryResults.textContent = 'Nach dem Import kannst Du hier Wörter suchen.';
+    els.dictionaryResults.classList.add('empty-clue-list');
+    return;
+  }
+
+  const settings = getSettings();
+  const queryRaw = els.dictionarySearch.value.trim();
+  const query = normalizeWord(queryRaw).grid;
+  const filtered = getFilteredDictionaryEntries(settings);
+  let matches = [];
+  if (query) {
+    const rawUpper = queryRaw.toUpperCase();
+    matches = filtered.filter((entry) => entry.grid.includes(query) || entry.original.toUpperCase().includes(rawUpper));
+  } else {
+    matches = filtered.slice(0, 24);
+  }
+  const limit = 40;
+  const visible = matches.slice(0, limit);
+  els.dictionaryResults.classList.remove('empty-clue-list');
+  if (!visible.length) {
+    els.dictionaryResults.innerHTML = '<span class="word-meta">Keine Treffer mit der aktuellen Mindestlänge.</span>';
+    return;
+  }
+  const intro = query
+    ? `${formatNumber(matches.length)} Treffer für „${escapeHtml(queryRaw)}“`
+    : `${formatNumber(filtered.length)} Wörter passen zur aktuellen Mindestlänge. Erste Vorschau:`;
+  els.dictionaryResults.innerHTML = `
+    <div class="dictionary-result-summary">${intro}</div>
+    <div class="dictionary-result-list">
+      ${visible.map((entry) => `<span class="dictionary-word" title="${escapeHtml(entry.original)}">${escapeHtml(entry.original)} <small>${escapeHtml(entry.grid)} · ${entry.length}</small></span>`).join('')}
+    </div>
+    ${matches.length > limit ? `<div class="word-meta">Weitere ${formatNumber(matches.length - limit)} Treffer ausgeblendet.</div>` : ''}`;
+}
+
+async function importDictionaryFile(file) {
+  if (!file) return;
+  setMessages([{ text: `Wörterbuch „${file.name}“ wird importiert. Bei großen Listen kann der Browser kurz beschäftigt sein.` }]);
+  const text = await file.text();
+  dictionaryState = analyzeDictionaryText(text, file.name, 3);
+  buildDictionaryIndex();
+  await saveDictionaryToDb();
+  updateDictionaryUi();
+  const stats = dictionaryState.stats;
+  setMessages([
+    { type: 'ok', text: `Wörterbuch importiert: ${formatNumber(stats.usable)} nutzbare Wörter stehen bereit.` },
+    ...(stats.ambiguousGridForms ? [{ text: `${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen wurden erkannt, z. B. MASSE aus unterschiedlichen Originalwörtern. Für das Rätsel wird jeweils eine bevorzugte Form verwendet.` }] : []),
+  ]);
+}
+
+function fillWordInputFromDictionary() {
+  const settings = getSettings();
+  if (!hasDictionary()) {
+    setMessages([{ type: 'error', text: 'Bitte importiere zuerst eine Wörterbuchdatei.' }]);
+    return false;
+  }
+  const picked = pickDictionaryWords(settings);
+  if (!picked.length) {
+    setMessages([{ type: 'error', text: 'Keine Wörter im Wörterbuch passen zur aktuellen Mindestlänge und zum Format.' }]);
+    return false;
+  }
+  els.wordInput.value = picked.map((entry) => entry.original).join('\n');
+  saveState();
+  setMessages([{ type: 'ok', text: `${picked.length} Wörter aus dem Wörterbuch wurden in die Wortliste übernommen.` }]);
+  return true;
 }
 
 function parseWords(text, minLength, maxWords, seeds) {
@@ -520,7 +789,7 @@ function renderLists() {
   currentPuzzle.parseIssues.forEach((issue) => items.push(`<li>${escapeHtml(issue)}</li>`));
   currentPuzzle.unplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
   if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Wörter wegen Maximalgrenze nicht verarbeitet.</li>`);
-  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.2 sauber erzeugt.</li>');
+  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.3 sauber erzeugt.</li>');
   els.unplacedList.innerHTML = items.join('');
 }
 
@@ -611,10 +880,14 @@ function updateButtons(enabled) {
 }
 
 function createPuzzle() {
-  const settings = getSettings();
+  let settings = getSettings();
   if (!settings.wordText.trim() && !settings.seedAcross.trim() && !settings.seedDown.trim()) {
-    setMessages([{ type: 'error', text: 'Bitte gib mindestens ein paar Wörter oder ein Leitwort ein.' }]);
-    return;
+    if (hasDictionary() && fillWordInputFromDictionary()) {
+      settings = getSettings();
+    } else {
+      setMessages([{ type: 'error', text: 'Bitte gib Wörter ein, importiere ein Wörterbuch oder trage ein Leitwort ein.' }]);
+      return;
+    }
   }
 
   const existingClues = collectCurrentClues();
@@ -626,7 +899,7 @@ function createPuzzle() {
   els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Ausgabeformat: ${settings.width} × ${settings.height}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
-    ...(unplacedCount ? [{ text: `${unplacedCount} Wörter konnten in v0.2 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(unplacedCount ? [{ text: `${unplacedCount} Wörter konnten in v0.3 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
   ]);
   updateButtons(Boolean(placedCount));
   saveState();
@@ -734,6 +1007,7 @@ function saveState() {
       cellSize: els.cellSize.value,
       baseName: els.baseName.value,
       wordInput: els.wordInput.value,
+      dictionarySearch: els.dictionarySearch ? els.dictionarySearch.value : '',
     },
     clueBank,
   };
@@ -776,6 +1050,7 @@ function resetState() {
   els.cellSize.value = '42';
   els.baseName.value = 'raetsel_001';
   els.wordInput.value = examples.join('\n');
+  if (els.dictionarySearch) els.dictionarySearch.value = '';
   currentPuzzle = null;
   currentView = 'empty';
   clueBank = {};
@@ -789,8 +1064,52 @@ function resetState() {
   els.downClues.textContent = 'Nach dem Erstellen erscheinen hier die Fragenfelder.';
   els.acrossClues.classList.add('empty-clue-list');
   els.downClues.classList.add('empty-clue-list');
-  setMessages([{ text: 'Zurückgesetzt. Beispielwörter sind wieder geladen.' }]);
+  setMessages([{ text: 'Zurückgesetzt. Beispielwörter sind wieder geladen; ein importiertes Wörterbuch bleibt erhalten.' }]);
 }
+
+
+if (els.dictionaryFile) {
+  els.dictionaryFile.addEventListener('change', async () => {
+    const file = els.dictionaryFile.files && els.dictionaryFile.files[0];
+    if (!file) return;
+    try {
+      await importDictionaryFile(file);
+    } catch (error) {
+      console.error(error);
+      setMessages([{ type: 'error', text: 'Das Wörterbuch konnte nicht importiert werden. Bitte prüfe die Datei.' }]);
+    } finally {
+      els.dictionaryFile.value = '';
+    }
+  });
+}
+
+if (els.fillFromDictionary) {
+  els.fillFromDictionary.addEventListener('click', fillWordInputFromDictionary);
+}
+
+if (els.clearDictionary) {
+  els.clearDictionary.addEventListener('click', async () => {
+    dictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [] };
+    dictionaryIndex = new Map();
+    await clearDictionaryFromDb();
+    updateDictionaryUi();
+    setMessages([{ text: 'Wörterbuch entfernt. Du kannst jederzeit eine neue Wortliste importieren.' }]);
+  });
+}
+
+if (els.dictionarySearch) {
+  els.dictionarySearch.addEventListener('input', () => {
+    renderDictionaryResults();
+    saveState();
+  });
+}
+
+[els.minLength, els.gridWidth, els.gridHeight, els.maxWords].forEach((input) => {
+  input.addEventListener('change', () => {
+    renderDictionaryResults();
+    saveState();
+  });
+});
 
 els.generateButton.addEventListener('click', createPuzzle);
 els.exampleButton.addEventListener('click', () => {
@@ -905,4 +1224,7 @@ if ('serviceWorker' in navigator) {
 }
 
 loadState();
-setMessages([{ text: 'Bereit für v0.2. Tipp: Nach dem Erstellen kannst Du Fragen direkt unter dem Gitter eintragen und exportieren.' }]);
+loadDictionaryFromDb().then(() => {
+  updateDictionaryUi();
+  setMessages([{ text: 'Bereit für v0.3. Du kannst jetzt eine TXT- oder DIC-Wortliste importieren und lokal durchsuchen.' }]);
+});

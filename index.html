@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#1f2937" />
-  <title>Kreuzwortdrucker v0.2.0</title>
+  <title>Kreuzwortdrucker v0.3.0</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -14,7 +14,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">PWA-Prototyp</p>
-      <h1>Kreuzwortdrucker <span>v0.2.0</span></h1>
+      <h1>Kreuzwortdrucker <span>v0.3.0</span></h1>
     </div>
     <div class="header-actions">
       <button id="installButton" class="ghost hidden" type="button">App installieren</button>
@@ -25,7 +25,7 @@
   <main class="app-layout">
     <section class="panel controls" aria-labelledby="settingsTitle">
       <h2 id="settingsTitle">Rätsel erstellen</h2>
-      <p class="hint">v0.2 arbeitet mit Deiner eingegebenen Wortliste und ergänzt eine Fragenverwaltung direkt am Rätsel.</p>
+      <p class="hint">v0.3 kann zusätzlich eine lokale Wörterbuchdatei importieren, filtern und durchsuchen.</p>
 
       <div class="grid two">
         <label>
@@ -73,6 +73,25 @@
             <input id="baseName" type="text" value="raetsel_001" />
           </label>
         </div>
+      </details>
+
+      <details class="advanced dictionary-tools" open>
+        <summary>Wörterbuch importieren und durchsuchen</summary>
+        <p class="hint">Importiert TXT- oder Hunspell-DIC-Dateien lokal im Browser. Sehr kurze Wörter unter 3 Buchstaben werden ausgeschlossen; die aktuelle Mindestlänge filtert später die Auswahl für das Rätsel.</p>
+        <label>
+          Open-Source-Wortliste auswählen
+          <input id="dictionaryFile" type="file" accept=".txt,.dic,text/plain" />
+        </label>
+        <div class="button-row wrap">
+          <button id="fillFromDictionary" type="button" disabled>Wortliste aus Wörterbuch füllen</button>
+          <button id="clearDictionary" class="ghost" type="button" disabled>Wörterbuch entfernen</button>
+        </div>
+        <div id="dictionaryStatus" class="dictionary-status">Noch kein Wörterbuch importiert.</div>
+        <label>
+          Wörterbuch durchsuchen
+          <input id="dictionarySearch" type="search" placeholder="z. B. METAPHER oder Maß" disabled />
+        </label>
+        <div id="dictionaryResults" class="dictionary-results empty-clue-list">Nach dem Import kannst Du hier Wörter suchen.</div>
       </details>
 
       <label>
@@ -127,6 +146,18 @@ Logik</textarea>
         <div class="empty-state">Klick auf „Rätsel erstellen“ und die Buchstaben nehmen Aufstellung.</div>
       </div>
 
+      <div class="export-box">
+        <h3>Export</h3>
+        <div class="button-row wrap">
+          <button id="exportEmptySvg" type="button" disabled>Leeres Gitter SVG</button>
+          <button id="exportSolutionSvg" type="button" disabled>Gelöstes Gitter SVG</button>
+          <button id="exportSolutionsTxt" type="button" disabled>Lösungsliste TXT</button>
+          <button id="exportCluesTxt" type="button" disabled>Fragen TXT</button>
+          <button id="exportCluesCsv" type="button" disabled>Fragen CSV</button>
+          <button id="exportProjectJson" type="button" disabled>Projekt JSON</button>
+        </div>
+      </div>
+
       <div id="clueEditor" class="clue-editor" aria-labelledby="clueEditorTitle">
         <div class="clue-head">
           <div>
@@ -146,17 +177,6 @@ Logik</textarea>
         </div>
       </div>
 
-      <div class="export-box">
-        <h3>Export</h3>
-        <div class="button-row wrap">
-          <button id="exportEmptySvg" type="button" disabled>Leeres Gitter SVG</button>
-          <button id="exportSolutionSvg" type="button" disabled>Gelöstes Gitter SVG</button>
-          <button id="exportSolutionsTxt" type="button" disabled>Lösungsliste TXT</button>
-          <button id="exportCluesTxt" type="button" disabled>Fragen TXT</button>
-          <button id="exportCluesCsv" type="button" disabled>Fragen CSV</button>
-          <button id="exportProjectJson" type="button" disabled>Projekt JSON</button>
-        </div>
-      </div>
     </section>
 
     <section class="panel lists" aria-labelledby="listsTitle">
@@ -180,8 +200,8 @@ Logik</textarea>
   </main>
 
   <footer class="app-footer">
-    <span>Kreuzwortdrucker v0.2.0</span>
-    <span>Freiform-im-Format-Prototyp mit Fragenverwaltung für Buchsatz und Canva-Export</span>
+    <span>Kreuzwortdrucker v0.3.0</span>
+    <span>Freiform-im-Format-Prototyp mit Wörterbuchimport, Fragenverwaltung und Canva-Export</span>
   </footer>
 
   <script src="app.js"></script>
