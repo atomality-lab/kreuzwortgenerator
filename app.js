@@ -1,8 +1,8 @@
 'use strict';
 
-const VERSION = '0.5.3';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.5.3.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.6.0';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.6.0.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.5.3.lastState', 'kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
@@ -90,7 +90,7 @@ let importedDictionaryState = { entries: [], stats: null, sourceName: '', import
 let dictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [], builtInCount: 0, importedCount: 0, importSourceName: '' };
 let dictionaryIndex = new Map();
 const PERSONAL_STORAGE_KEY = 'kreuzwortdrucker.personalDictionary';
-const LEGACY_PERSONAL_STORAGE_KEYS = ['kreuzwortdrucker.v0.4.1.personalDictionary', 'kreuzwortdrucker.v0.4.0.personalDictionary'];
+const LEGACY_PERSONAL_STORAGE_KEYS = ['kreuzwortdrucker.v0.5.3.personalDictionary', 'kreuzwortdrucker.v0.5.2.personalDictionary', 'kreuzwortdrucker.v0.5.1.personalDictionary', 'kreuzwortdrucker.v0.5.0.personalDictionary', 'kreuzwortdrucker.v0.4.1.personalDictionary', 'kreuzwortdrucker.v0.4.0.personalDictionary'];
 const DEFAULT_PERSONAL_LIST = 'Allgemein';
 let personalDictionary = createEmptyPersonalDictionary();
 const SAFE_STORAGE_KEY = 'kreuzwortdrucker.safeVocabulary';
@@ -424,15 +424,31 @@ function upsertSafeWord(rawWord, source = 'manuell', increment = 0) {
   return { ok: true, word: safeVocabulary.words[clean.grid] };
 }
 
-function addPlacedWordsToSafeVocabulary(puzzle) {
-  if (!puzzle || !Array.isArray(puzzle.placed)) return;
-  puzzle.placed.forEach((word) => {
-    if (!word || !word.grid) return;
-    const source = word.source === 'dictionary' ? 'Datenbank verwendet' : word.source === 'safe' ? 'gesichert verwendet' : 'persönlich verwendet';
-    upsertSafeWord(word.original || word.grid, source, 1);
-  });
+function removeSafeWord(rawWord) {
+  const clean = normalizeWord(rawWord);
+  if (!clean.grid || !safeVocabulary.words[clean.grid]) return false;
+  delete safeVocabulary.words[clean.grid];
   saveSafeVocabulary();
   renderSafeVocabularyUi();
+  return true;
+}
+
+function savePuzzleWordToSafe(rawWord) {
+  const result = upsertSafeWord(rawWord, 'bewusst gesichert', 1);
+  if (!result.ok) {
+    setMessages([{ type: 'error', text: result.reason }]);
+    return;
+  }
+  saveSafeVocabulary();
+  renderSafeVocabularyUi();
+  renderLists();
+  setMessages([{ type: 'ok', text: `${result.word.original} wurde bewusst in den gesicherten Wortschatz aufgenommen.` }]);
+}
+
+function addPlacedWordsToSafeVocabulary(puzzle) {
+  // Seit v0.6.0 werden Wörter nicht mehr automatisch gesichert.
+  // Diese Funktion bleibt nur als Kompatibilitätshülle für ältere Aufrufe erhalten.
+  return puzzle;
 }
 
 function getSafeVocabularyEntries(settings = getSettings(), extraExcluded = new Set()) {
@@ -1122,8 +1138,9 @@ function appendBlockedWord(rawWord) {
     savePersonalDictionary();
     renderPersonalDictionaryUi();
   }
+  const removedSafe = removeSafeWord(clean.grid);
   saveState();
-  setMessages([{ type: 'ok', text: `${clean.grid} wird künftig ausgeschlossen. Das Rätsel wurde neu erzeugt.` }]);
+  setMessages([{ type: 'ok', text: `${clean.grid} wird künftig ausgeschlossen${removedSafe ? ' und wurde aus dem gesicherten Wortschatz entfernt' : ''}. Das Rätsel wird neu erzeugt.` }]);
   createPuzzle();
 }
 
@@ -1808,11 +1825,28 @@ function renderPuzzle() {
   renderClueEditors();
 }
 
+function getPlacedWordSourceLabel(source) {
+  if (source === 'seedAcross' || source === 'seedDown') return 'Leitwort';
+  if (source === 'list') return 'Themenwort';
+  if (source === 'safe') return 'gesicherter Füllfundus';
+  if (source === 'dictionary') return 'Datenbank-Füllwort';
+  return 'Wort';
+}
+
 function renderLists() {
   if (!currentPuzzle) return;
   const across = currentPuzzle.entries.filter((entry) => entry.direction === 'across');
   const down = currentPuzzle.entries.filter((entry) => entry.direction === 'down');
-  const itemHtml = (entry) => `<li value="${entry.number}"><strong>${escapeHtml(entry.value)}</strong> <span class="word-meta">(${entry.length})</span> <button class="mini ghost" type="button" data-block-word="${escapeHtml(entry.value)}">nicht verwenden</button></li>`;
+  const itemHtml = (entry) => {
+    const placedWord = findPlacedWordForEntry(currentPuzzle, entry);
+    const original = placedWord ? placedWord.original : entry.value;
+    const sourceLabel = placedWord ? getPlacedWordSourceLabel(placedWord.source) : 'Wort';
+    const isSafe = Boolean(safeVocabulary.words[entry.value]);
+    const safeButton = isSafe
+      ? '<span class="word-meta">gesichert</span>'
+      : `<button class="mini ghost" type="button" data-save-word="${escapeHtml(original)}">sichern</button>`;
+    return `<li value="${entry.number}"><strong>${escapeHtml(entry.value)}</strong> <span class="word-meta">(${entry.length} · ${escapeHtml(sourceLabel)})</span> ${safeButton} <button class="mini ghost" type="button" data-block-word="${escapeHtml(entry.value)}">nicht verwenden</button></li>`;
+  };
   els.acrossList.innerHTML = across.map(itemHtml).join('');
   els.downList.innerHTML = down.map(itemHtml).join('');
 
@@ -1941,7 +1975,6 @@ function createPuzzle(useDictionary = true) {
   const themeUnplacedCount = getThemeUnplacedWords(currentPuzzle).length;
   const dictionaryUnplacedCount = currentPuzzle.unplaced.filter((word) => word.source === 'dictionary' || word.source === 'safe').length;
   els.stats.textContent = `${placedCount} Wörter platziert, ${themeUnplacedCount} Themenwörter nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
-  addPlacedWordsToSafeVocabulary(currentPuzzle);
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? (useDictionary ? `Rätsel erzeugt und gefüllt: ${placedCount} Wörter wurden platziert.` : `Rätsel aus Themenliste erzeugt: ${placedCount} Wörter wurden platziert.`) : 'Es konnte kein Startwort platziert werden.' },
     ...(themeUnplacedCount ? [{ text: `${themeUnplacedCount} Themenwörter konnten nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
@@ -2348,9 +2381,14 @@ els.resetButton.addEventListener('click', resetState);
 
 [els.acrossList, els.downList].forEach((list) => {
   list.addEventListener('click', (event) => {
-    const button = event.target.closest('button[data-block-word]');
-    if (!button) return;
-    appendBlockedWord(button.dataset.blockWord);
+    const saveButton = event.target.closest('button[data-save-word]');
+    if (saveButton) {
+      savePuzzleWordToSafe(saveButton.dataset.saveWord);
+      return;
+    }
+    const blockButton = event.target.closest('button[data-block-word]');
+    if (!blockButton) return;
+    appendBlockedWord(blockButton.dataset.blockWord);
   });
 });
 
@@ -2463,5 +2501,5 @@ renderPersonalDictionaryUi();
 renderSafeVocabularyUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.5.3. Persönliche Listen bilden die Themenbasis; der deutsche Vollfundus liefert gefilterte Grundformen als Füllmaterial.' }]);
+  setMessages([{ text: 'Bereit für v0.6.0. Persönliche Listen bilden die Themenbasis; der deutsche Vollfundus liefert gefilterte Grundformen als Füllmaterial.' }]);
 });

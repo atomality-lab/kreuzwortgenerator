@@ -1,18 +1,18 @@
-# Kreuzwortdrucker v0.5.3
+# Kreuzwortdrucker v0.6.0
 
-PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit großem deutschem Wortfundus, persönlichem Wortschatz, Fragenverwaltung und SVG-/TXT-/CSV-Export.
+PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit großem deutschem Wortfundus, persönlichem Wortschatz, zweistufiger Fülllogik, Fragenverwaltung und SVG-/TXT-/CSV-Export.
 
-## Neu in v0.5.3
+## Neu in v0.6.0
 
-- Der Button **„Beispiel laden“** wurde aus der Hauptaktion entfernt und als **„Testbeispiel laden“** in einen eigenen Bereich **„Testdaten“** verschoben.
-- Der Datenbank-Wortschatz ist standardmäßig stärker gefiltert:
-  - Substantive sind als Grundform und Mehrzahl erlaubt.
-  - Adjektive werden möglichst nur ungebeugt verwendet.
-  - Verben werden möglichst nur als Grundform/Infinitiv verwendet.
-  - Genitivformen wie „Aales“ oder „Abbaus“ werden im Standardmodus vermieden.
-- Die Oberfläche spricht jetzt von **Datenbank-Formen** statt allgemein von Wortformen, weil der Filter nur für den Hintergrund-Füllfundus gilt.
-- Persönliche Wörter und gesicherte Wörter bleiben bewusst unverändert, damit eigene Themenwörter, englische Wörter oder manuell geprüfte Begriffe nicht weggefiltert werden.
-- Die bestehende Zwei-Schritt-Logik aus v0.5.2 bleibt erhalten: **Rätsel aus Liste erstellen** nutzt nur Themenwörter, **Rätsel erstellen / Lücken füllen** ergänzt Füllwörter.
+- Wörter werden **nicht mehr automatisch** in den gesicherten Wortschatz übernommen, nur weil sie im Rätsel verwendet wurden.
+- In der rechten Lösungsliste gibt es pro verwendetem Wort einen Button **„sichern“**.
+- Erst nach Klick auf **„sichern“** wird ein Wort bewusst in den gesicherten Wortschatz übernommen.
+- Bereits gesicherte Wörter werden in der Lösungsliste als **„gesichert“** markiert.
+- Wenn ein Wort über **„nicht verwenden“** ausgeschlossen wird, wird es zusätzlich aus dem gesicherten Wortschatz entfernt.
+- Dadurch können ausgeschlossene Wörter wie `AKKON` nicht mehr als bevorzugt gesicherte Füllwörter zurückkehren.
+- Die bestehende Zwei-Schritt-Logik bleibt erhalten:
+  - **Rätsel aus Liste erstellen** nutzt nur die Themenwörter aus der persönlichen Liste.
+  - **Rätsel erstellen / Lücken füllen** ergänzt danach mit gesichertem Wortschatz und Basiswortschatz.
 
 ## Bereits enthalten
 
@@ -21,9 +21,11 @@ PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit gr
 - Zusatzlisten-Import für fremdsprachige Wörter, Fachbegriffe oder Eigennamen
 - automatische Umschrift Ä/Ö/Ü/ß zu AE/OE/UE/SS
 - Unicode-Normalisierung für zerlegte Umlaute
-- Wortformenfilter
+- Datenbank-Formenfilter: Grundformen + Substantiv-Mehrzahl, streng oder alle Wörterbuchformen
 - Wortarten-Gewichtung
 - persönliche Wörter und gesperrte Wörter
+- persönliche Listen mit Mehrfachzuordnung
+- gesicherter Wortschatz als bevorzugter Füllwortspeicher
 - automatische Nummerierung
 - leere und gelöste Ansicht
 - Fragenfelder für Waagrecht/Senkrecht
@@ -34,17 +36,18 @@ PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit gr
 - Export Projektstand als JSON
 - Export/Import persönlicher und gesicherter Wortschatz als JSON
 - Darstellungsoption: schwarze Felder oder Begrenzungslinien
-- gesicherter Wortschatz als bevorzugter Füllwortspeicher
 
 ## Bedienlogik persönlicher Wortschatz
 
 1. Liste anlegen, z. B. `Philosophie` oder `Pflege`.
 2. Beim Wort hinzufügen eine oder mehrere Ziellisten auswählen.
-3. Wort hinzufügen.
+3. Wort hinzufügen oder eine TXT-/CSV-Wortliste importieren.
 4. Bei bestehenden Wörtern über die Trefferliste weitere Listen ergänzen.
 5. Optional Wörter sperren, damit sie bei künftigen Generatorläufen ausgeschlossen werden.
 6. Mit **Rätsel aus Liste erstellen** die ausgewählte Liste ins aktuelle Rätsel übernehmen und ohne Datenbank-Füllwörter generieren.
-7. Mit **Rätsel erstellen / Lücken füllen** kann der aktuelle Arbeitskorb zusätzlich mit gesichertem Wortschatz und Basiswortschatz ergänzt werden.
+7. Mit **Rätsel erstellen / Lücken füllen** den aktuellen Arbeitskorb zusätzlich mit gesichertem Wortschatz und Basiswortschatz ergänzen.
+8. Gute verwendete Wörter in der Lösungsliste bewusst über **„sichern“** in den gesicherten Wortschatz übernehmen.
+9. Ungeeignete Wörter über **„nicht verwenden“** ausschließen. Sie werden dann nicht bevorzugt gespeichert.
 
 Wenn keine Zielliste für ein neues Wort oder einen Import markiert ist, wird die aktuell ausgewählte Liste verwendet.
 
@@ -76,4 +79,4 @@ Vor dem Löschen von Website-Daten bitte den persönlichen Wortschatz als JSON e
 
 ## Hinweis zur nächsten Generatorstufe
 
-v0.5.3 trennt die Bedienlogik erstmals sichtbar in zwei Schritte: Themenliste platzieren und danach optional mit gesichertem/Basiswortschatz füllen. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.
+v0.6.0 bereinigt die Sicherungslogik und macht den Füllwortschatz kontrollierter. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.
