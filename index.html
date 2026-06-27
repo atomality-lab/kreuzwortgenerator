@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#1f2937" />
-  <title>Kreuzwortdrucker v0.3.3</title>
+  <title>Kreuzwortdrucker v0.3.4</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -14,7 +14,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">PWA-Prototyp</p>
-      <h1>Kreuzwortdrucker <span>v0.3.3</span></h1>
+      <h1>Kreuzwortdrucker <span>v0.3.4</span></h1>
     </div>
     <div class="header-actions">
       <button id="installButton" class="ghost hidden" type="button">App installieren</button>
@@ -25,7 +25,7 @@
   <main class="app-layout">
     <section class="panel controls" aria-labelledby="settingsTitle">
       <h2 id="settingsTitle">Rätsel erstellen</h2>
-      <p class="hint">v0.3.3 nutzt einen eingebauten deutschen Vollfundus mit Wortformenfilter auf Basis von cspell/dict-de-de 4.1.2, de-DE_frami und igerman98. Zusatzlisten sind optional.</p>
+      <p class="hint">v0.3.4 nutzt einen eingebauten deutschen Vollfundus mit Wortformenfilter und gewichteter Wortarten-Auswahl auf Basis von cspell/dict-de-de 4.1.2, de-DE_frami und igerman98. Zusatzlisten sind optional.</p>
 
       <div class="grid two">
         <label>
@@ -57,6 +57,29 @@
           <option value="all">Alle Wörterbuchformen</option>
         </select>
       </label>
+
+      <details class="advanced word-type-tools">
+        <summary>Wortarten-Gewichtung</summary>
+        <p class="hint">Die Wortarten werden heuristisch aus Schreibweise und Endungen geschätzt. Standard: 60 % Substantive, 20 % Adjektive, 10 % Verben, 10 % Andere.</p>
+        <div class="grid four weight-grid">
+          <label>
+            Substantive
+            <input id="nounWeight" type="number" min="0" max="100" value="60" />
+          </label>
+          <label>
+            Adjektive
+            <input id="adjectiveWeight" type="number" min="0" max="100" value="20" />
+          </label>
+          <label>
+            Verben
+            <input id="verbWeight" type="number" min="0" max="100" value="10" />
+          </label>
+          <label>
+            Andere
+            <input id="otherWeight" type="number" min="0" max="100" value="10" />
+          </label>
+        </div>
+      </details>
 
       <details class="advanced">
         <summary>Leitwörter und Ausgabe</summary>
@@ -193,8 +216,8 @@ UND"></textarea>
   </main>
 
   <footer class="app-footer">
-    <span>Kreuzwortdrucker v0.3.3</span>
-    <span>Freiform-im-Format-Prototyp mit deutschem Vollfundus, Wortformenfilter, Zusatzimport, Ausschlussliste, Fragenverwaltung und Canva-Export</span>
+    <span>Kreuzwortdrucker v0.3.4</span>
+    <span>Freiform-im-Format-Prototyp mit deutschem Vollfundus, Wortformenfilter, gewichteter Wortarten-Auswahl, Zusatzimport, Ausschlussliste, Fragenverwaltung und Canva-Export</span>
   </footer>
 
   <script src="builtin-de.js"></script>

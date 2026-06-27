@@ -1,8 +1,8 @@
 'use strict';
 
-const VERSION = '0.3.3';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.3.3.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.3.4';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.3.4.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
@@ -12,6 +12,10 @@ const els = {
   minLength: document.querySelector('#minLength'),
   maxWords: document.querySelector('#maxWords'),
   wordFormMode: document.querySelector('#wordFormMode'),
+  nounWeight: document.querySelector('#nounWeight'),
+  adjectiveWeight: document.querySelector('#adjectiveWeight'),
+  verbWeight: document.querySelector('#verbWeight'),
+  otherWeight: document.querySelector('#otherWeight'),
   seedAcross: document.querySelector('#seedAcross'),
   seedDown: document.querySelector('#seedDown'),
   cropToContent: document.querySelector('#cropToContent'),
@@ -291,6 +295,112 @@ function getWordFormModeLabel(mode) {
   return 'basisnah';
 }
 
+function getWordTypeWeights(settings = getSettings()) {
+  const noun = clampNumber(settings.nounWeight ?? 60, 0, 100, 60);
+  const adjective = clampNumber(settings.adjectiveWeight ?? 20, 0, 100, 20);
+  const verb = clampNumber(settings.verbWeight ?? 10, 0, 100, 10);
+  const other = clampNumber(settings.otherWeight ?? 10, 0, 100, 10);
+  const total = noun + adjective + verb + other;
+  if (!total) return { noun: 60, adjective: 20, verb: 10, other: 10 };
+  return { noun, adjective, verb, other };
+}
+
+function formatWordTypeWeights(settings = getSettings()) {
+  const weights = getWordTypeWeights(settings);
+  return `${weights.noun}:${weights.adjective}:${weights.verb}:${weights.other}`;
+}
+
+function getWordTypeLabel(type) {
+  if (type === 'noun') return 'Substantiv';
+  if (type === 'adjective') return 'Adjektiv';
+  if (type === 'verb') return 'Verb';
+  return 'Andere';
+}
+
+function getShortWordTypeLabel(type) {
+  if (type === 'noun') return 'Subst.';
+  if (type === 'adjective') return 'Adj.';
+  if (type === 'verb') return 'Verb';
+  return 'Andere';
+}
+
+function countWordTypes(entries = []) {
+  const counts = { noun: 0, adjective: 0, verb: 0, other: 0 };
+  entries.forEach((entry) => {
+    const type = classifyWordType(entry);
+    counts[type] = (counts[type] || 0) + 1;
+  });
+  return counts;
+}
+
+function formatWordTypeCounts(entries = []) {
+  const counts = countWordTypes(entries);
+  return ['noun', 'adjective', 'verb', 'other']
+    .map((type) => `${getShortWordTypeLabel(type)} ${counts[type] || 0}`)
+    .join(', ');
+}
+
+function classifyWordType(entry) {
+  if (!entry) return 'other';
+  if (entry.wordType) return entry.wordType;
+  const original = String(entry.original || entry.grid || '');
+  const grid = entry.grid || normalizeWord(original).grid;
+  const lower = original.toLocaleLowerCase('de-DE');
+  let type = 'other';
+
+  if (/\.$/.test(original) || /[0-9]/.test(original) || /[^A-Za-zÄÖÜäöüßẞ.\-]/.test(original)) {
+    type = 'other';
+  } else if (/^[A-ZÄÖÜẞ]/.test(original)) {
+    type = 'noun';
+  } else if (likelyInflectedVerb(grid, lower) || /(ieren|igen|eln|ern|en|n)$/.test(lower)) {
+    const adjectiveLike = /(bar|haft|ig|isch|lich|los|sam|weise|artig|förmig|reich|arm|voll|leer|nah|fern|weit|weitig|malig)$/.test(lower);
+    type = adjectiveLike ? 'adjective' : 'verb';
+  } else if (likelyInflectedAdjective(grid) || /(bar|haft|ig|isch|lich|los|sam|weise|artig|förmig|reich|arm|voll|leer|nah|fern|weit|weitig|malig|al|ell|iv|ös|ant|ent)$/.test(lower)) {
+    type = 'adjective';
+  }
+
+  entry.wordType = type;
+  return type;
+}
+
+function scoreDictionaryEntry(entry, settings) {
+  const maxLength = Math.max(settings.width, settings.height);
+  const idealLength = Math.min(Math.max(settings.minLength + 3, 7), Math.max(8, Math.min(maxLength, 12)));
+  return Math.random() * 100 + Math.max(0, 90 - Math.abs(entry.length - idealLength) * 9) + Math.min(entry.length, 10) * 2;
+}
+
+function getWeightedTargets(total, settings) {
+  const weights = getWordTypeWeights(settings);
+  const sum = Math.max(1, weights.noun + weights.adjective + weights.verb + weights.other);
+  const exact = {
+    noun: total * weights.noun / sum,
+    adjective: total * weights.adjective / sum,
+    verb: total * weights.verb / sum,
+    other: total * weights.other / sum,
+  };
+  const targets = Object.fromEntries(Object.entries(exact).map(([type, value]) => [type, Math.floor(value)]));
+  let assigned = Object.values(targets).reduce((a, b) => a + b, 0);
+  Object.entries(exact)
+    .sort((a, b) => (b[1] - Math.floor(b[1])) - (a[1] - Math.floor(a[1])))
+    .forEach(([type]) => {
+      if (assigned < total) {
+        targets[type] += 1;
+        assigned += 1;
+      }
+    });
+  return targets;
+}
+
+function addReservoirSample(bucket, entry, limit) {
+  bucket.checked += 1;
+  if (bucket.entries.length < limit) {
+    bucket.entries.push(entry);
+    return;
+  }
+  const replaceIndex = Math.floor(Math.random() * bucket.checked);
+  if (replaceIndex < limit) bucket.entries[replaceIndex] = entry;
+}
+
 function hasAnyDictionaryGrid(...grids) {
   return grids.some((grid) => grid && grid.length >= 2 && dictionaryIndex.has(grid));
 }
@@ -410,7 +520,7 @@ function updateDictionaryUi() {
     ? `<br><span class="word-meta">Zusatzliste: ${escapeHtml(dictionaryState.importSourceName)} · ${formatNumber(dictionaryState.importedCount)} importierte Einträge</span>`
     : '<br><span class="word-meta">Keine Zusatzliste importiert. Du kannst fremdsprachige oder eigene Wörter zusätzlich laden.</span>';
   const ambiguous = stats.ambiguousGridForms ? ` · ${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen erkannt` : '';
-  const filterInfo = `<br><span class="word-meta">Aktiver Wortformenfilter: ${escapeHtml(getWordFormModeLabel(settings.wordFormMode))} · ${formatNumber(filteredCount)} Wörter nach aktueller Länge/Form nutzbar</span>`;
+  const filterInfo = `<br><span class="word-meta">Aktiver Wortformenfilter: ${escapeHtml(getWordFormModeLabel(settings.wordFormMode))} · Wortarten-Gewichtung ${escapeHtml(formatWordTypeWeights(settings))} · ${formatNumber(filteredCount)} Wörter nach aktueller Länge/Form nutzbar</span>`;
   els.dictionaryStatus.innerHTML = `
     <strong>${escapeHtml(dictionaryState.sourceName)}</strong><br>
     ${formatNumber(stats.usable)} nutzbare Wörter verfügbar · davon ${formatNumber(dictionaryState.builtInCount)} eingebaut · ${formatNumber(stats.tooShort)} sehr kurze Wörter ausgeschlossen${escapeHtml(ambiguous)}
@@ -432,8 +542,20 @@ function getFilteredDictionaryEntries(settings = getSettings(), extraExcluded = 
 function pickDictionaryWords(settings = getSettings(), extraExcluded = new Set(), targetCount = settings.maxWords) {
   const maxLength = Math.max(settings.width, settings.height);
   const blocked = getBlockedGridSet(settings.blockedWordsText || '');
-  const sampleTarget = Math.min(Math.max(targetCount, settings.maxWords * 8, 250), 1200);
-  const sampled = [];
+  const sampleTarget = Math.min(Math.max(targetCount, settings.maxWords * 8, 250), 1600);
+  const targets = getWeightedTargets(sampleTarget, settings);
+  const sampleLimits = {
+    noun: Math.max(80, targets.noun * 4),
+    adjective: Math.max(60, targets.adjective * 4),
+    verb: Math.max(40, targets.verb * 4),
+    other: Math.max(40, targets.other * 4),
+  };
+  const buckets = {
+    noun: { entries: [], checked: 0 },
+    adjective: { entries: [], checked: 0 },
+    verb: { entries: [], checked: 0 },
+    other: { entries: [], checked: 0 },
+  };
   let checked = 0;
 
   dictionaryState.entries.forEach((entry) => {
@@ -441,23 +563,47 @@ function pickDictionaryWords(settings = getSettings(), extraExcluded = new Set()
     if (blocked.has(entry.grid) || extraExcluded.has(entry.grid)) return;
     if (isLikelyInflectedEntry(entry, settings.wordFormMode)) return;
     checked += 1;
-    if (sampled.length < sampleTarget) {
-      sampled.push(entry);
-      return;
-    }
-    const replaceIndex = Math.floor(Math.random() * checked);
-    if (replaceIndex < sampleTarget) sampled[replaceIndex] = entry;
+    const type = classifyWordType(entry);
+    addReservoirSample(buckets[type] || buckets.other, entry, sampleLimits[type] || sampleLimits.other);
   });
 
-  const idealLength = Math.min(Math.max(settings.minLength + 3, 7), Math.max(8, Math.min(maxLength, 12)));
-  const scored = sampled.map((entry) => ({
-    entry,
-    score: Math.random() * 100 + Math.max(0, 90 - Math.abs(entry.length - idealLength) * 9) + Math.min(entry.length, 10) * 2,
-  }));
-  scored.sort((a, b) => b.score - a.score);
-  const words = scored.map((item) => item.entry);
-  words.checkedDictionaryEntries = checked;
-  return words;
+  const scoredByType = {};
+  Object.keys(buckets).forEach((type) => {
+    scoredByType[type] = buckets[type].entries
+      .map((entry) => ({ entry, type, score: scoreDictionaryEntry(entry, settings) }))
+      .sort((a, b) => b.score - a.score || b.entry.length - a.entry.length || a.entry.grid.localeCompare(b.entry.grid, 'de'));
+  });
+
+  const selectedItems = [];
+  const selectedKeys = new Set();
+  const take = (item) => {
+    if (!item || selectedKeys.has(item.entry.grid)) return false;
+    selectedItems.push(item);
+    selectedKeys.add(item.entry.grid);
+    return true;
+  };
+
+  Object.entries(targets).forEach(([type, count]) => {
+    scoredByType[type].slice(0, count).forEach(take);
+  });
+
+  if (selectedItems.length < sampleTarget) {
+    const leftovers = Object.values(scoredByType)
+      .flat()
+      .filter((item) => !selectedKeys.has(item.entry.grid))
+      .sort((a, b) => b.score - a.score || b.entry.length - a.entry.length || a.entry.grid.localeCompare(b.entry.grid, 'de'));
+    for (const item of leftovers) {
+      if (selectedItems.length >= sampleTarget) break;
+      take(item);
+    }
+  }
+
+  selectedItems.sort((a, b) => b.score - a.score || b.entry.length - a.entry.length || a.entry.grid.localeCompare(b.entry.grid, 'de'));
+  const selected = selectedItems.map((item) => item.entry);
+  selected.checkedDictionaryEntries = checked;
+  selected.typeTargets = targets;
+  selected.typeCounts = Object.fromEntries(Object.keys(buckets).map((type) => [type, buckets[type].checked]));
+  return selected;
 }
 
 function renderDictionaryResults() {
@@ -492,7 +638,7 @@ function renderDictionaryResults() {
   els.dictionaryResults.innerHTML = `
     <div class="dictionary-result-summary">${intro}</div>
     <div class="dictionary-result-list">
-      ${visible.map((entry) => `<span class="dictionary-word" title="${escapeHtml(entry.original)}">${escapeHtml(entry.original)} <small>${escapeHtml(entry.grid)} · ${entry.length}</small></span>`).join('')}
+      ${visible.map((entry) => `<span class="dictionary-word" title="${escapeHtml(entry.original)}">${escapeHtml(entry.original)} <small>${escapeHtml(entry.grid)} · ${entry.length} · ${escapeHtml(getWordTypeLabel(classifyWordType(entry)))}</small></span>`).join('')}
     </div>
     ${matches.length > limit ? `<div class="word-meta">Weitere ${formatNumber(matches.length - limit)} Treffer ausgeblendet.</div>` : ''}`;
 }
@@ -1028,7 +1174,7 @@ function renderLists() {
   currentPuzzle.parseIssues.forEach((issue) => items.push(`<li>${escapeHtml(issue)}</li>`));
   currentPuzzle.unplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
   if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Wörter wegen Maximalgrenze nicht verarbeitet.</li>`);
-  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.3.3 sauber erzeugt.</li>');
+  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.3.4 sauber erzeugt.</li>');
   els.unplacedList.innerHTML = items.join('');
 }
 
@@ -1094,6 +1240,10 @@ function getSettings() {
     minLength: clampNumber(els.minLength.value, 2, 30, 3),
     maxWords: clampNumber(els.maxWords.value, 1, 200, 40),
     wordFormMode: els.wordFormMode ? els.wordFormMode.value : 'basic',
+    nounWeight: els.nounWeight ? els.nounWeight.value : 60,
+    adjectiveWeight: els.adjectiveWeight ? els.adjectiveWeight.value : 20,
+    verbWeight: els.verbWeight ? els.verbWeight.value : 10,
+    otherWeight: els.otherWeight ? els.otherWeight.value : 10,
     seedAcross: els.seedAcross.value,
     seedDown: els.seedDown.value,
     cropToContent: els.cropToContent.checked,
@@ -1133,10 +1283,10 @@ function createPuzzle() {
   const used = getUsedCells(currentPuzzle.grid).length;
   const placedCount = currentPuzzle.placed.length;
   const unplacedCount = currentPuzzle.unplaced.length;
-  els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Ausgabeformat: ${settings.width} × ${settings.height}.`;
+  els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
-    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.3.3 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.3.4 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
   ]);
   updateButtons(Boolean(placedCount));
   saveState();
@@ -1239,6 +1389,10 @@ function saveState() {
       minLength: els.minLength.value,
       maxWords: els.maxWords.value,
       wordFormMode: els.wordFormMode ? els.wordFormMode.value : 'basic',
+      nounWeight: els.nounWeight ? els.nounWeight.value : '60',
+      adjectiveWeight: els.adjectiveWeight ? els.adjectiveWeight.value : '20',
+      verbWeight: els.verbWeight ? els.verbWeight.value : '10',
+      otherWeight: els.otherWeight ? els.otherWeight.value : '10',
       seedAcross: els.seedAcross.value,
       seedDown: els.seedDown.value,
       cropToContent: els.cropToContent.checked,
@@ -1284,6 +1438,10 @@ function resetState() {
   els.minLength.value = '3';
   els.maxWords.value = '40';
   if (els.wordFormMode) els.wordFormMode.value = 'basic';
+  if (els.nounWeight) els.nounWeight.value = '60';
+  if (els.adjectiveWeight) els.adjectiveWeight.value = '20';
+  if (els.verbWeight) els.verbWeight.value = '10';
+  if (els.otherWeight) els.otherWeight.value = '10';
   els.seedAcross.value = '';
   els.seedDown.value = '';
   els.cropToContent.checked = true;
@@ -1346,7 +1504,7 @@ if (els.dictionarySearch) {
   });
 }
 
-[els.minLength, els.gridWidth, els.gridHeight, els.maxWords, els.wordFormMode].filter(Boolean).forEach((input) => {
+[els.minLength, els.gridWidth, els.gridHeight, els.maxWords, els.wordFormMode, els.nounWeight, els.adjectiveWeight, els.verbWeight, els.otherWeight].filter(Boolean).forEach((input) => {
   input.addEventListener('change', () => {
     renderDictionaryResults();
     saveState();
@@ -1483,5 +1641,5 @@ if ('serviceWorker' in navigator) {
 loadState();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.3.3. Der eingebaute deutsche Vollfundus ist aktiv; TXT- oder DIC-Dateien kannst Du zusätzlich importieren.' }]);
+  setMessages([{ text: 'Bereit für v0.3.4. Der eingebaute deutsche Vollfundus ist aktiv; die Wortarten-Gewichtung steht standardmäßig auf 60:20:10:10.' }]);
 });
