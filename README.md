@@ -1,8 +1,8 @@
-# Kreuzwortdrucker v0.1.0
+# Kreuzwortdrucker v0.2.0
 
 PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit Export für Buchsatz/Canva.
 
-## Enthalten in v0.1.0
+## Enthalten in v0.2.0
 
 - PWA-Grundstruktur mit Manifest und Service Worker
 - einstellbares Zielformat, z. B. 22 × 15 Kästchen
@@ -16,24 +16,34 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit Export für Buc
 - gelöste Rätselansicht
 - Lösungsliste waagrecht/senkrecht
 - Anzeige nicht platzierter Wörter und Hinweise
+- Fragenverwaltung direkt unter dem Gitter:
+  - getrennte Bereiche für Waagrecht und Senkrecht
+  - Textfeld pro Nummer/Lösungswort
+  - Anzeige von Originalwort, Gitterwort und Wortlänge
+  - Status „Frage fehlt“ / „Frage eingetragen“
+  - Fragen bleiben lokal im Browser gespeichert und werden möglichst über Richtung + Lösungswort wieder zugeordnet
 - Export als SVG:
   - leeres Gitter
   - gelöstes Gitter
 - Export als TXT:
   - Lösungsliste
+  - Fragenkatalog
+- Export als CSV:
+  - Fragenkatalog mit Nummer, Richtung, Frage, Originalwort, Gitterwort, Länge und Status
 - Export als JSON:
-  - Projektstand
-- lokale Speicherung der letzten Eingaben im Browser
+  - Projektstand inklusive Fragen
+- lokale Speicherung der letzten Eingaben und Fragen im Browser
 
 ## Noch nicht enthalten
 
 - Wörterbuchimport
 - echte Kategorien wie Abkürzung, Fremdwort, Eigenname
-- XLSX-/CSV-Fragenexport
+- XLSX-Export
 - PNG-Export
 - manuelle Nachbearbeitung einzelner Wörter im Gitter
 - klassischer Rastergenerator mit gezieltem Schwarzfeldmuster
 - vollständige Konsistenzprüfung nach manuellen Änderungen
+- Import gespeicherter Projekt-JSON-Dateien
 
 ## Nutzung
 
@@ -41,7 +51,9 @@ PWA-Prototyp für einen deutschen Kreuzworträtsel-Generator mit Export für Buc
 2. Wörter eingeben oder Beispiel laden.
 3. Format einstellen.
 4. „Rätsel erstellen“ klicken.
-5. Leeres oder gelöstes Gitter als SVG exportieren.
+5. Unter dem Gitter Fragen zu den nummerierten Wörtern eintragen.
+6. Leeres oder gelöstes Gitter als SVG exportieren.
+7. Fragen als TXT oder CSV exportieren.
 
 Für PWA/Service-Worker-Funktion am besten über einen lokalen Webserver testen, z. B.:
 
@@ -57,6 +69,8 @@ http://localhost:8000
 
 ## Hinweise zum Generator
 
-Der Generator ist in v0.1.0 bewusst einfach gehalten. Er sucht Kreuzungen zwischen den eingegebenen Wörtern und setzt nicht nutzbare Felder beim Export als schwarze Felder. Nicht platzierbare Wörter werden angezeigt.
+Der Generator ist in v0.2.0 weiterhin bewusst einfach gehalten. Er sucht Kreuzungen zwischen den eingegebenen Wörtern und setzt nicht nutzbare Felder beim Export als schwarze Felder. Nicht platzierbare Wörter werden angezeigt.
 
-Für die nächsten Versionen ist der Ausbau in Richtung Wörterbuch, Qualitätsfilter, Fragenverwaltung und Canva-Exportpaket vorgesehen.
+Die neue Fragenverwaltung ist bereits auf den späteren Buchsatz ausgerichtet: Das Gitter kann separat exportiert werden, die Fragen können als Text oder CSV in Canva, Excel oder ein anderes Satzprogramm übernommen werden.
+
+Für die nächsten Versionen ist der Ausbau in Richtung Wörterbuch, Qualitätsfilter, PNG-Export, Projektimport und komfortablere Nachbearbeitung vorgesehen.

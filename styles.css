@@ -396,3 +396,104 @@ summary {
     flex-wrap: wrap;
   }
 }
+
+.clue-editor {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.clue-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.clue-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 0.8rem;
+}
+
+.clue-columns h4 {
+  margin: 0 0 0.6rem;
+  font-size: 0.96rem;
+}
+
+.clue-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.empty-clue-list {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  padding: 0.8rem;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.clue-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.75rem;
+}
+
+.clue-card label {
+  margin: 0;
+}
+
+.clue-meta-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.45rem;
+}
+
+.clue-number {
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.clue-solution {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.86rem;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.clue-input {
+  min-height: 74px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.35;
+}
+
+.clue-status {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.clue-status.missing {
+  color: var(--danger);
+}
+
+.clue-status.done {
+  color: var(--ok);
+}
+
+@media (max-width: 860px) {
+  .clue-columns {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,7 +1,8 @@
 'use strict';
 
-const VERSION = '0.1.0';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.1.lastState';
+const VERSION = '0.2.0';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.2.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.1.lastState'];
 
 const els = {
   gridWidth: document.querySelector('#gridWidth'),
@@ -26,10 +27,15 @@ const els = {
   exportEmptySvg: document.querySelector('#exportEmptySvg'),
   exportSolutionSvg: document.querySelector('#exportSolutionSvg'),
   exportSolutionsTxt: document.querySelector('#exportSolutionsTxt'),
+  exportCluesTxt: document.querySelector('#exportCluesTxt'),
+  exportCluesCsv: document.querySelector('#exportCluesCsv'),
   exportProjectJson: document.querySelector('#exportProjectJson'),
   acrossList: document.querySelector('#acrossList'),
   downList: document.querySelector('#downList'),
   unplacedList: document.querySelector('#unplacedList'),
+  clueEditor: document.querySelector('#clueEditor'),
+  acrossClues: document.querySelector('#acrossClues'),
+  downClues: document.querySelector('#downClues'),
 };
 
 const examples = [
@@ -43,6 +49,7 @@ const examples = [
 let currentPuzzle = null;
 let currentView = 'empty';
 let deferredInstallPrompt = null;
+let clueBank = {};
 
 function normalizeWord(raw) {
   const original = String(raw || '').trim();
@@ -299,6 +306,53 @@ function tryPlaceSeeds(grid, words, width, height, seedAcrossRaw, seedDownRaw) {
   return placed;
 }
 
+
+function getEntryKey(entry) {
+  return `${entry.direction}|${entry.value}`;
+}
+
+function getDirectionLabel(direction) {
+  return direction === 'across' ? 'Waagrecht' : 'Senkrecht';
+}
+
+function collectCurrentClues() {
+  const collected = { ...clueBank };
+  if (currentPuzzle && currentPuzzle.clues) {
+    Object.assign(collected, currentPuzzle.clues);
+  }
+  if (els.clueEditor) {
+    els.clueEditor.querySelectorAll('textarea[data-clue-key]').forEach((input) => {
+      collected[input.dataset.clueKey] = input.value;
+    });
+  }
+  return collected;
+}
+
+function attachCluesToPuzzle(puzzle, existingClues) {
+  const clues = {};
+  puzzle.entries.forEach((entry) => {
+    const key = getEntryKey(entry);
+    clues[key] = existingClues[key] || '';
+  });
+  puzzle.clues = clues;
+  clueBank = { ...existingClues, ...clues };
+  return puzzle;
+}
+
+function getClueForEntry(entry) {
+  const key = getEntryKey(entry);
+  if (currentPuzzle && currentPuzzle.clues && Object.prototype.hasOwnProperty.call(currentPuzzle.clues, key)) {
+    return currentPuzzle.clues[key] || '';
+  }
+  return clueBank[key] || '';
+}
+
+function findPlacedWordForEntry(puzzle, entry) {
+  return puzzle.placed.find((word) => word.direction === entry.direction && word.row === entry.row && word.col === entry.col && word.grid === entry.value)
+    || puzzle.placed.find((word) => word.grid === entry.value)
+    || null;
+}
+
 function generatePuzzle(options) {
   const grid = makeEmptyGrid(options.width, options.height);
   const { words, issues, skippedByLimit } = parseWords(options.wordText, options.minLength, options.maxWords, {
@@ -452,6 +506,7 @@ function renderPuzzle() {
   els.emptyViewButton.classList.toggle('active', currentView === 'empty');
   els.solutionViewButton.classList.toggle('active', currentView === 'solution');
   renderLists();
+  renderClueEditors();
 }
 
 function renderLists() {
@@ -465,8 +520,53 @@ function renderLists() {
   currentPuzzle.parseIssues.forEach((issue) => items.push(`<li>${escapeHtml(issue)}</li>`));
   currentPuzzle.unplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
   if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Wörter wegen Maximalgrenze nicht verarbeitet.</li>`);
-  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.1 sauber erzeugt.</li>');
+  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.2 sauber erzeugt.</li>');
   els.unplacedList.innerHTML = items.join('');
+}
+
+
+function renderClueEditors() {
+  if (!currentPuzzle) {
+    els.acrossClues.textContent = 'Nach dem Erstellen erscheinen hier die Fragenfelder.';
+    els.downClues.textContent = 'Nach dem Erstellen erscheinen hier die Fragenfelder.';
+    els.acrossClues.classList.add('empty-clue-list');
+    els.downClues.classList.add('empty-clue-list');
+    return;
+  }
+
+  const across = currentPuzzle.entries.filter((entry) => entry.direction === 'across');
+  const down = currentPuzzle.entries.filter((entry) => entry.direction === 'down');
+  renderClueList(els.acrossClues, across);
+  renderClueList(els.downClues, down);
+}
+
+function renderClueList(container, entries) {
+  if (!entries.length) {
+    container.textContent = 'Keine Einträge in dieser Richtung.';
+    container.classList.add('empty-clue-list');
+    return;
+  }
+  container.classList.remove('empty-clue-list');
+  container.innerHTML = entries.map((entry) => {
+    const key = getEntryKey(entry);
+    const clue = getClueForEntry(entry);
+    const placedWord = findPlacedWordForEntry(currentPuzzle, entry);
+    const original = placedWord ? placedWord.original : entry.value;
+    const statusClass = clue.trim() ? 'done' : 'missing';
+    const statusText = clue.trim() ? 'Frage eingetragen' : 'Frage fehlt';
+    const textareaId = `clue-${entry.direction}-${entry.number}-${entry.row}-${entry.col}`;
+    return `
+      <div class="clue-card">
+        <label for="${textareaId}">
+          <span class="clue-meta-line">
+            <span class="clue-number">${entry.number}. ${getDirectionLabel(entry.direction)}</span>
+            <span class="clue-solution">${escapeHtml(original)} / ${escapeHtml(entry.value)} (${entry.length})</span>
+          </span>
+          <textarea id="${textareaId}" class="clue-input" data-clue-key="${escapeHtml(key)}" data-direction="${entry.direction}" data-number="${entry.number}" placeholder="Frage zu ${escapeHtml(entry.value)} eingeben">${escapeHtml(clue)}</textarea>
+          <span class="clue-status ${statusClass}">${statusText}</span>
+        </label>
+      </div>`;
+  }).join('');
 }
 
 function escapeHtml(value) {
@@ -505,7 +605,7 @@ function sanitizeFileBase(value) {
 }
 
 function updateButtons(enabled) {
-  [els.exportEmptySvg, els.exportSolutionSvg, els.exportSolutionsTxt, els.exportProjectJson].forEach((button) => {
+  [els.exportEmptySvg, els.exportSolutionSvg, els.exportSolutionsTxt, els.exportCluesTxt, els.exportCluesCsv, els.exportProjectJson].forEach((button) => {
     button.disabled = !enabled;
   });
 }
@@ -517,7 +617,8 @@ function createPuzzle() {
     return;
   }
 
-  currentPuzzle = generatePuzzle(settings);
+  const existingClues = collectCurrentClues();
+  currentPuzzle = attachCluesToPuzzle(generatePuzzle(settings), existingClues);
   currentView = 'empty';
   const used = getUsedCells(currentPuzzle.grid).length;
   const placedCount = currentPuzzle.placed.length;
@@ -525,7 +626,7 @@ function createPuzzle() {
   els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Ausgabeformat: ${settings.width} × ${settings.height}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
-    ...(unplacedCount ? [{ text: `${unplacedCount} Wörter konnten in v0.1 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(unplacedCount ? [{ text: `${unplacedCount} Wörter konnten in v0.2 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
   ]);
   updateButtons(Boolean(placedCount));
   saveState();
@@ -554,6 +655,57 @@ function buildSolutionsText(puzzle) {
   return lines.join('\n');
 }
 
+
+function buildCluesText(puzzle) {
+  const across = puzzle.entries.filter((entry) => entry.direction === 'across');
+  const down = puzzle.entries.filter((entry) => entry.direction === 'down');
+  const lines = [];
+  lines.push('Kreuzwortdrucker v' + VERSION);
+  lines.push('Fragenkatalog');
+  lines.push('Erzeugt: ' + new Date(puzzle.createdAt).toLocaleString('de-DE'));
+  lines.push('');
+  lines.push('Waagrecht');
+  across.forEach((entry) => {
+    const clue = getClueForEntry(entry).trim();
+    lines.push(`${entry.number}. ${clue || '[Frage fehlt]'}`);
+  });
+  lines.push('');
+  lines.push('Senkrecht');
+  down.forEach((entry) => {
+    const clue = getClueForEntry(entry).trim();
+    lines.push(`${entry.number}. ${clue || '[Frage fehlt]'}`);
+  });
+  return lines.join('\n');
+}
+
+function csvEscape(value) {
+  const text = String(value ?? '');
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function buildCluesCsv(puzzle) {
+  const header = ['Nummer', 'Richtung', 'Frage', 'Originalwort', 'Gitterwort', 'Laenge', 'Status'];
+  const rows = [header];
+  const orderedEntries = [
+    ...puzzle.entries.filter((entry) => entry.direction === 'across'),
+    ...puzzle.entries.filter((entry) => entry.direction === 'down'),
+  ];
+  orderedEntries.forEach((entry) => {
+    const placedWord = findPlacedWordForEntry(puzzle, entry);
+    const clue = getClueForEntry(entry).trim();
+    rows.push([
+      entry.number,
+      getDirectionLabel(entry.direction),
+      clue,
+      placedWord ? placedWord.original : entry.value,
+      entry.value,
+      entry.length,
+      clue ? 'fertig' : 'offen',
+    ]);
+  });
+  return '\uFEFF' + rows.map((row) => row.map(csvEscape).join(';')).join('\r\n');
+}
+
 function downloadText(filename, content, type) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -567,6 +719,9 @@ function downloadText(filename, content, type) {
 }
 
 function saveState() {
+  if (els.clueEditor) {
+    clueBank = collectCurrentClues();
+  }
   const data = {
     fields: {
       gridWidth: els.gridWidth.value,
@@ -580,15 +735,23 @@ function saveState() {
       baseName: els.baseName.value,
       wordInput: els.wordInput.value,
     },
+    clueBank,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 function loadState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      for (const legacyKey of LEGACY_STORAGE_KEYS) {
+        raw = localStorage.getItem(legacyKey);
+        if (raw) break;
+      }
+    }
     if (!raw) return;
     const data = JSON.parse(raw);
+    clueBank = data.clueBank || {};
     if (!data.fields) return;
     Object.entries(data.fields).forEach(([key, value]) => {
       if (!els[key]) return;
@@ -602,6 +765,7 @@ function loadState() {
 
 function resetState() {
   localStorage.removeItem(STORAGE_KEY);
+  LEGACY_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
   els.gridWidth.value = '22';
   els.gridHeight.value = '15';
   els.minLength.value = '4';
@@ -614,12 +778,17 @@ function resetState() {
   els.wordInput.value = examples.join('\n');
   currentPuzzle = null;
   currentView = 'empty';
+  clueBank = {};
   updateButtons(false);
   els.stats.textContent = 'Noch kein Rätsel erzeugt.';
   els.gridWrap.innerHTML = '<div class="empty-state">Klick auf „Rätsel erstellen“ und die Buchstaben nehmen Aufstellung.</div>';
   els.acrossList.innerHTML = '';
   els.downList.innerHTML = '';
   els.unplacedList.innerHTML = '';
+  els.acrossClues.textContent = 'Nach dem Erstellen erscheinen hier die Fragenfelder.';
+  els.downClues.textContent = 'Nach dem Erstellen erscheinen hier die Fragenfelder.';
+  els.acrossClues.classList.add('empty-clue-list');
+  els.downClues.classList.add('empty-clue-list');
   setMessages([{ text: 'Zurückgesetzt. Beispielwörter sind wieder geladen.' }]);
 }
 
@@ -647,6 +816,26 @@ els.solutionViewButton.addEventListener('click', () => {
   renderPuzzle();
 }));
 
+
+els.clueEditor.addEventListener('input', (event) => {
+  const input = event.target;
+  if (!(input instanceof HTMLTextAreaElement) || !input.matches('textarea[data-clue-key]')) return;
+  const key = input.dataset.clueKey;
+  clueBank[key] = input.value;
+  if (currentPuzzle && currentPuzzle.clues) {
+    currentPuzzle.clues[key] = input.value;
+  }
+  const card = input.closest('.clue-card');
+  const status = card ? card.querySelector('.clue-status') : null;
+  if (status) {
+    const done = input.value.trim().length > 0;
+    status.textContent = done ? 'Frage eingetragen' : 'Frage fehlt';
+    status.classList.toggle('done', done);
+    status.classList.toggle('missing', !done);
+  }
+  saveState();
+});
+
 els.exportEmptySvg.addEventListener('click', () => {
   if (!currentPuzzle) return;
   const settings = getSettings();
@@ -667,9 +856,25 @@ els.exportSolutionsTxt.addEventListener('click', () => {
   downloadText(`${settings.baseName}_loesungsliste.txt`, buildSolutionsText(currentPuzzle), 'text/plain;charset=utf-8');
 });
 
+els.exportCluesTxt.addEventListener('click', () => {
+  if (!currentPuzzle) return;
+  const settings = getSettings();
+  clueBank = collectCurrentClues();
+  downloadText(`${settings.baseName}_fragen.txt`, buildCluesText(currentPuzzle), 'text/plain;charset=utf-8');
+});
+
+els.exportCluesCsv.addEventListener('click', () => {
+  if (!currentPuzzle) return;
+  const settings = getSettings();
+  clueBank = collectCurrentClues();
+  downloadText(`${settings.baseName}_fragen.csv`, buildCluesCsv(currentPuzzle), 'text/csv;charset=utf-8');
+});
+
 els.exportProjectJson.addEventListener('click', () => {
   if (!currentPuzzle) return;
   const settings = getSettings();
+  clueBank = collectCurrentClues();
+  if (currentPuzzle) currentPuzzle.clues = Object.fromEntries(currentPuzzle.entries.map((entry) => [getEntryKey(entry), clueBank[getEntryKey(entry)] || '']));
   const serializable = {
     ...currentPuzzle,
     numbers: Array.from(currentPuzzle.numbers.entries()),
@@ -700,4 +905,4 @@ if ('serviceWorker' in navigator) {
 }
 
 loadState();
-setMessages([{ text: 'Bereit für v0.1. Tipp: Mit den Beispielwörtern lässt sich der erste Generatorlauf testen.' }]);
+setMessages([{ text: 'Bereit für v0.2. Tipp: Nach dem Erstellen kannst Du Fragen direkt unter dem Gitter eintragen und exportieren.' }]);
