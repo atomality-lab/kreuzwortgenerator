@@ -1,135 +1,77 @@
-# Kreuzwortdrucker v0.4.1
+# Kreuzwortdrucker v0.5.0
 
-PWA-Prototyp zum Erzeugen, Bearbeiten und Exportieren von Kreuzworträtseln für Buchsatz/Canva.
+PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit großem deutschem Wortfundus, persönlichem Wortschatz, Fragenverwaltung und SVG-/TXT-/CSV-Export.
 
-## Enthalten in v0.4.1
+## Neu in v0.5.0
 
-### Korrekturen
+- persönlicher Wortschatz erweitert
+- Wörter können mehreren Listen gleichzeitig zugeordnet werden
+- beim Anlegen eines Wortes können mehrere Listen ausgewählt werden
+- beim Import einer TXT-/CSV-Wortliste können mehrere Listen als Ziel ausgewählt werden
+- bestehende Wörter können nachträglich weiteren Listen hinzugefügt werden
+- persönliche Listen zeigen weiterhin, ob Wörter gesperrt sind
+- ausgewählte persönliche Liste kann direkt als Themenbasis verwendet werden
+- neuer Button: **Rätsel aus Liste erstellen**
+- persönlicher Wortschatz aus v0.4.x wird automatisch übernommen
 
-- Unicode-Umlautnormalisierung repariert
-- Wörter mit zerlegten Umlauten werden jetzt korrekt umgesetzt
-- Beispiele:
-  - Fächer → FAECHER
-  - ähneln → AEHNELN
-  - Gedärm → GEDAERM
-- persönlicher Wortschatz aus v0.4.0 wird automatisch übernommen
-- Service-Worker-Cache auf v0.4.1 erhöht
-- umlautlose Parallelformen aus der Wörterbuchquelle werden bevorzugt entfernt, wenn eine Umlautform vorhanden ist, z. B. `ahneln` zugunsten von `ähneln`
+## Bereits enthalten
 
-### Neue Ausgabeoption
-
-Im Bereich „Leitwörter und Ausgabe“ gibt es jetzt die Einstellung **Gitterdarstellung**:
-
-- **Rechteck mit schwarzen Feldern**
-- **Begrenzungslinien ohne schwarze Felder**
-
-Wichtig: Der Linienmodus ist in v0.4.1 zunächst eine Darstellungs-/Exportoption für das aktuell erzeugte Gitter. Der spätere kompakte Vollraster-Generator ohne schwarze Felder, bei dem alle Felder eines Formats wie 22 × 15 belegt sind und Wortgrenzen durch Linien entstehen, ist eine eigene Generatorstufe.
-
-### Persönlicher Wortschatz
-
-- eigener persönlicher Wortschatz wird lokal im Browser gespeichert
-- Standardliste „Allgemein“
-- neue Listen anlegen, z. B. Philosophie, Pflege, IT, Medizin
-- Wörter manuell hinzufügen
-- TXT-/CSV-Wortlisten in die ausgewählte Liste importieren
-- persönliche Wörter durchsuchen
-- Wörter aus einer Liste entfernen
-- Wörter als „gesperrt“ markieren und wieder freigeben
-- gesperrte persönliche Wörter werden bei der Generierung ausgeschlossen
-- persönliche Liste kann in das Feld „Zusatz-/Wunschwörter“ übernommen werden
-- persönlicher Wortschatz kann als JSON exportiert und später wieder importiert werden
-
-### Deutscher Vollfundus
-
-- eingebauter deutscher Wortfundus aus `@cspell/dict-de-de` 4.1.2
-- Quelle: de-DE_frami / igerman98
-- Umlaute und ß werden automatisch in AE/OE/UE/SS normalisiert
-- Wortformenfilter: basisnah, streng, alle Wörterbuchformen
-- heuristische Wortarten-Gewichtung: Substantive, Adjektive, Verben, Andere
-- zusätzliche TXT-/DIC-Wortlisten können als Ergänzungsfundus importiert werden
-
-### Rätsel
-
-- Format einstellbar, z. B. 22 × 15 Kästchen
-- Mindestwortlänge einstellbar
-- maximale Wortanzahl einstellbar
-- optionale Leitwörter waagrecht/senkrecht
-- automatische Platzierung als Freiform-im-Format
-- ungenutzte Felder werden je nach Darstellungsmodus schwarz oder unsichtbar dargestellt
+- einstellbares Format, z. B. 22 × 15
+- großer eingebauter deutscher Wörterbuchfundus auf Basis von `@cspell/dict-de-de` 4.1.2 / de-DE_frami / igerman98
+- Zusatzlisten-Import für fremdsprachige Wörter, Fachbegriffe oder Eigennamen
+- automatische Umschrift Ä/Ö/Ü/ß zu AE/OE/UE/SS
+- Unicode-Normalisierung für zerlegte Umlaute
+- Wortformenfilter
+- Wortarten-Gewichtung
+- persönliche Wörter und gesperrte Wörter
 - automatische Nummerierung
 - leere und gelöste Ansicht
-- Lösungsliste waagrecht/senkrecht
-- Fragenfelder pro Wort
+- Fragenfelder für Waagrecht/Senkrecht
+- Export leeres Gitter als SVG
+- Export Lösung als SVG
+- Export Lösungen als TXT
+- Export Fragen als TXT/CSV
+- Export Projektstand als JSON
+- Export/Import persönlicher Wortschatz als JSON
+- Darstellungsoption: schwarze Felder oder Begrenzungslinien
 
-### Export
+## Bedienlogik persönlicher Wortschatz
 
-- leeres Gitter als SVG
-- gelöstes Gitter als SVG
-- Lösungsliste als TXT
-- Fragen als TXT
-- Fragen als CSV
-- Projektstand als JSON
-- persönlicher Wortschatz als JSON
+1. Liste anlegen, z. B. `Philosophie` oder `Pflege`.
+2. Beim Wort hinzufügen eine oder mehrere Ziellisten auswählen.
+3. Wort hinzufügen.
+4. Bei bestehenden Wörtern über die Trefferliste weitere Listen ergänzen.
+5. Optional Wörter sperren, damit sie bei künftigen Generatorläufen ausgeschlossen werden.
+6. Mit **Rätsel aus Liste erstellen** die ausgewählte Liste ins aktuelle Rätsel übernehmen und direkt generieren.
 
-## Nutzung
+Wenn keine Zielliste für ein neues Wort oder einen Import markiert ist, wird die aktuell ausgewählte Liste verwendet.
 
-Die App sollte über einen lokalen Webserver oder GitHub/Netlify/GitHub Pages geöffnet werden. Nicht per direktem Doppelklick auf `index.html`, da PWA-Funktionen und Service Worker sonst je nach Browser eingeschränkt sind.
+## Lokal starten
 
-Lokal im entpackten Ordner starten:
+Im entpackten Ordner:
 
 ```bash
 python -m http.server 8000
 ```
 
-Dann öffnen:
+Dann im Browser öffnen:
 
 ```text
 http://localhost:8000
 ```
 
-## Arbeitsweise mit persönlichem Wortschatz
+## Update-Hinweis
 
-1. Im Bereich „Persönlicher Wortschatz“ eine Liste anlegen, z. B. „Philosophie“.
-2. Wörter manuell hinzufügen oder eine TXT-/CSV-Liste importieren.
-3. Die Liste mit „Liste ins Rätsel übernehmen“ in die Zusatz-/Wunschwörter übernehmen.
-4. „Rätsel erstellen“ klicken.
-5. Nicht gewünschte Wörter sperren oder in „Nicht verwenden“ aufnehmen.
-6. Rätsel neu erzeugen.
-7. Fragen erfassen und Exportdateien erzeugen.
+Bei GitHub Pages, Netlify oder installierter PWA kann der Service Worker alte Dateien cachen. Falls noch eine alte Version angezeigt wird:
 
-Die eigentliche Zwei-Schritt-Logik „erst Themenliste platzieren, danach Lücken mit Datenbankwörtern füllen“ ist für die nächste Ausbaustufe vorbereitet, aber in v0.4.1 noch nicht vollständig getrennt umgesetzt.
+1. Entwicklertools öffnen.
+2. Application / Anwendung öffnen.
+3. Service Worker abmelden.
+4. Website-Daten löschen.
+5. Seite hart neu laden.
 
-## Wichtige Hinweise
+Vor dem Löschen von Website-Daten bitte den persönlichen Wortschatz als JSON exportieren.
 
-Der persönliche Wortschatz liegt lokal im Browser. Vor Cache-/Website-Datenlöschungen bitte den persönlichen Wortschatz als JSON exportieren.
+## Hinweis zur nächsten Generatorstufe
 
-Der Generator ist weiterhin ein Prototyp. Er nutzt den großen deutschen Fundus und persönliche Wörter, aber die spätere Qualitätslogik für gezieltes Füllen, Variantenvergleich und Themenpriorisierung kommt in den Folgeversionen.
-
-## Dateien
-
-- `index.html` – Oberfläche
-- `styles.css` – Gestaltung
-- `app.js` – Logik, Generator, persönlicher Wortschatz, Export
-- `builtin-de.js` – eingebauter deutscher Wortfundus
-- `manifest.webmanifest` – PWA-Manifest
-- `service-worker.js` – Offline-/Cache-Grundlage
-- `THIRD_PARTY_NOTICES.md` – Quellen- und Lizenzhinweise
-- `LICENSE-cspell-dict-de-de.txt` – Lizenzhinweis zur Wörterbuchquelle
-
-## Nächste sinnvolle Version
-
-### v0.5.0: Rätsel aus persönlicher Liste
-
-- Liste auswählen
-- Wörter der Liste als Hauptwörter priorisieren
-- möglichst viele Wörter der Liste platzieren
-- persönliche Wörter klar markieren
-- nicht platzierte Themenwörter separat anzeigen
-- optional danach zweiter Schritt „Lücken füllen“ vorbereiten
-
-### Spätere Generatorstufe: Kompaktes Vollraster mit Begrenzungslinien
-
-- Format wie 22 × 15 vollständig belegen
-- keine schwarzen Felder
-- Wortgrenzen durch Begrenzungslinien
-- waagrechte und senkrechte Segmente konsistent aus Wörterbuch/Persönlichem Wortschatz füllen
+v0.5.0 verbessert den persönlichen Wortschatz und macht persönliche Listen als Themenbasis nutzbar. Die eigentliche Zwei-Schritt-Logik „erst Themenliste möglichst vollständig platzieren, danach Lücken mit Datenbankwörtern füllen“ ist vorbereitet, aber noch nicht als eigener Füllmodus umgesetzt.

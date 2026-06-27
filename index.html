@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#1f2937" />
-  <title>Kreuzwortdrucker v0.4.1</title>
+  <title>Kreuzwortdrucker v0.5.0</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -14,7 +14,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">PWA-Prototyp</p>
-      <h1>Kreuzwortdrucker <span>v0.4.1</span></h1>
+      <h1>Kreuzwortdrucker <span>v0.5.0</span></h1>
     </div>
     <div class="header-actions">
       <button id="installButton" class="ghost hidden" type="button">App installieren</button>
@@ -25,7 +25,7 @@
   <main class="app-layout">
     <section class="panel controls" aria-labelledby="settingsTitle">
       <h2 id="settingsTitle">Rätsel erstellen</h2>
-      <p class="hint">v0.4.1 korrigiert die Umlaut-Umschrift im Wörterbuch und ergänzt eine Ausgabeoption für Begrenzungslinien. Der persönliche Wortschatz bleibt erhalten.</p>
+      <p class="hint">v0.5.0 baut den persönlichen Wortschatz aus: Wörter können mehreren Listen zugeordnet werden, auch direkt beim Anlegen oder Import. Eine persönliche Liste kann direkt als Themenbasis fürs Rätsel verwendet werden.</p>
 
       <div class="grid two">
         <label>
@@ -102,7 +102,7 @@
             <option value="lines">Begrenzungslinien ohne schwarze Felder</option>
           </select>
         </label>
-        <p class="hint">Hinweis: Der Linienmodus ist in v0.4.1 eine Ausgabeoption. Der spätere kompakte Vollraster-Generator ohne schwarze Felder folgt als eigene Generatorstufe.</p>
+        <p class="hint">Hinweis: Der Linienmodus ist weiterhin eine Ausgabeoption. Der spätere kompakte Vollraster-Generator ohne schwarze Felder folgt als eigene Generatorstufe.</p>
         <div class="grid two">
           <label>
             Kästchengröße SVG
@@ -132,19 +132,25 @@
         </div>
         <div class="button-row wrap">
           <button id="personalCreateList" type="button">Liste anlegen</button>
-          <button id="personalUseList" class="primary" type="button">Liste ins Rätsel übernehmen</button>
+          <button id="personalUseList" type="button">Liste ins Rätsel übernehmen</button>
+          <button id="personalCreatePuzzleFromList" class="primary" type="button">Rätsel aus Liste erstellen</button>
         </div>
 
         <label>
           Wort hinzufügen
           <input id="personalWordInput" type="text" placeholder="z. B. Ambivalenz" />
         </label>
+        <label>
+          In Listen speichern <span class="muted">(Mehrfachauswahl mit Strg/Klick)</span>
+          <select id="personalWordListPicker" multiple size="4"></select>
+        </label>
+        <p class="hint">Wenn keine Liste markiert ist, wird die aktuell ausgewählte Liste verwendet. Dieselbe Auswahl gilt auch für importierte Wortlisten.</p>
         <div class="button-row wrap">
           <button id="personalAddWord" type="button">Wort hinzufügen</button>
         </div>
 
         <label>
-          Wortliste in ausgewählte Liste importieren
+          Wortliste in ausgewählte Listen importieren
           <input id="personalFile" type="file" accept=".txt,.csv,text/plain,text/csv" />
         </label>
 
@@ -272,7 +278,7 @@ UND"></textarea>
   </main>
 
   <footer class="app-footer">
-    <span>Kreuzwortdrucker v0.4.1</span>
+    <span>Kreuzwortdrucker v0.5.0</span>
     <span>Freiform-im-Format-Prototyp mit deutschem Vollfundus, persönlichem Wortschatz, Listenverwaltung, Ausschlussliste, Fragenverwaltung und Canva-Export</span>
   </footer>
 

@@ -1,8 +1,8 @@
 'use strict';
 
-const VERSION = '0.4.1';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.4.1.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.5.0';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.5.0.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
@@ -35,8 +35,10 @@ const els = {
   personalListName: document.querySelector('#personalListName'),
   personalCreateList: document.querySelector('#personalCreateList'),
   personalUseList: document.querySelector('#personalUseList'),
+  personalCreatePuzzleFromList: document.querySelector('#personalCreatePuzzleFromList'),
   personalWordInput: document.querySelector('#personalWordInput'),
   personalAddWord: document.querySelector('#personalAddWord'),
+  personalWordListPicker: document.querySelector('#personalWordListPicker'),
   personalFile: document.querySelector('#personalFile'),
   personalSearch: document.querySelector('#personalSearch'),
   personalResults: document.querySelector('#personalResults'),
@@ -81,7 +83,7 @@ let importedDictionaryState = { entries: [], stats: null, sourceName: '', import
 let dictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [], builtInCount: 0, importedCount: 0, importSourceName: '' };
 let dictionaryIndex = new Map();
 const PERSONAL_STORAGE_KEY = 'kreuzwortdrucker.personalDictionary';
-const LEGACY_PERSONAL_STORAGE_KEYS = ['kreuzwortdrucker.v0.4.0.personalDictionary'];
+const LEGACY_PERSONAL_STORAGE_KEYS = ['kreuzwortdrucker.v0.4.1.personalDictionary', 'kreuzwortdrucker.v0.4.0.personalDictionary'];
 const DEFAULT_PERSONAL_LIST = 'Allgemein';
 let personalDictionary = createEmptyPersonalDictionary();
 
@@ -242,30 +244,47 @@ function loadPersonalDictionary() {
   }
 }
 
-function upsertPersonalWord(rawWord, listName = personalDictionary.selectedList || DEFAULT_PERSONAL_LIST) {
+function normalizeTargetListNames(listNames) {
+  const raw = Array.isArray(listNames) ? listNames : [listNames || personalDictionary.selectedList || DEFAULT_PERSONAL_LIST];
+  const clean = raw.map(sanitizeListName).filter(Boolean);
+  return Array.from(new Set(clean.length ? clean : [DEFAULT_PERSONAL_LIST]));
+}
+
+function addPersonalWordToList(grid, listName) {
+  const clean = normalizeWord(grid);
+  const targetListName = sanitizeListName(listName);
+  if (!clean.grid || !targetListName) return false;
+  const word = personalDictionary.words[clean.grid];
+  if (!word) return false;
+  const list = ensurePersonalList(targetListName);
+  if (!word.lists.includes(targetListName)) word.lists.push(targetListName);
+  if (!list.wordGrids.includes(clean.grid)) list.wordGrids.push(clean.grid);
+  word.updatedAt = new Date().toISOString();
+  return true;
+}
+
+function upsertPersonalWord(rawWord, listNames = personalDictionary.selectedList || DEFAULT_PERSONAL_LIST) {
   const clean = normalizeWord(rawWord);
   if (!clean.original || !clean.grid) return { ok: false, reason: 'Keine gültigen Buchstaben gefunden.' };
-  const targetListName = sanitizeListName(listName);
-  const list = ensurePersonalList(targetListName);
+  const targetListNames = normalizeTargetListNames(listNames);
   const now = new Date().toISOString();
   const existing = personalDictionary.words[clean.grid];
   if (existing) {
     existing.original = existing.original || clean.original;
     existing.updatedAt = now;
-    if (!existing.lists.includes(targetListName)) existing.lists.push(targetListName);
   } else {
     personalDictionary.words[clean.grid] = {
       original: clean.original,
       grid: clean.grid,
       blocked: false,
-      lists: [targetListName],
+      lists: [],
       createdAt: now,
       updatedAt: now,
     };
   }
-  if (!list.wordGrids.includes(clean.grid)) list.wordGrids.push(clean.grid);
-  personalDictionary.selectedList = targetListName;
-  return { ok: true, word: personalDictionary.words[clean.grid] };
+  targetListNames.forEach((targetListName) => addPersonalWordToList(clean.grid, targetListName));
+  personalDictionary.selectedList = targetListNames[0] || personalDictionary.selectedList || DEFAULT_PERSONAL_LIST;
+  return { ok: true, word: personalDictionary.words[clean.grid], listNames: targetListNames };
 }
 
 function removePersonalWordFromList(grid, listName = personalDictionary.selectedList) {
@@ -330,12 +349,28 @@ function parsePersonalWordList(text) {
     });
 }
 
+
+function getSelectedPersonalTargetLists() {
+  if (!els.personalWordListPicker) return [personalDictionary.selectedList || DEFAULT_PERSONAL_LIST];
+  const selected = Array.from(els.personalWordListPicker.selectedOptions || []).map((option) => option.value);
+  return normalizeTargetListNames(selected.length ? selected : [personalDictionary.selectedList || DEFAULT_PERSONAL_LIST]);
+}
+
+function renderPersonalListPicker() {
+  if (!els.personalWordListPicker) return;
+  const lists = Object.values(personalDictionary.lists || {}).sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  const previous = Array.from(els.personalWordListPicker.selectedOptions || []).map((option) => option.value);
+  const selected = new Set(previous.length ? previous : [personalDictionary.selectedList || DEFAULT_PERSONAL_LIST]);
+  els.personalWordListPicker.innerHTML = lists.map((list) => `<option value="${escapeHtml(list.name)}"${selected.has(list.name) ? ' selected' : ''}>${escapeHtml(list.name)} (${formatNumber(list.wordGrids.length)})</option>`).join('');
+}
+
 function renderPersonalDictionaryUi() {
   if (!els.personalStatus) return;
   ensurePersonalList(personalDictionary.selectedList || DEFAULT_PERSONAL_LIST);
   const lists = Object.values(personalDictionary.lists).sort((a, b) => a.name.localeCompare(b.name, 'de'));
   els.personalListSelect.innerHTML = lists.map((list) => `<option value="${escapeHtml(list.name)}">${escapeHtml(list.name)} (${formatNumber(list.wordGrids.length)})</option>`).join('');
   els.personalListSelect.value = personalDictionary.selectedList;
+  renderPersonalListPicker();
 
   const stats = getPersonalStats();
   const selectedWords = getPersonalWordsForList(personalDictionary.selectedList);
@@ -370,17 +405,28 @@ function renderPersonalResults() {
   els.personalResults.innerHTML = `
     <div class="dictionary-result-summary">${escapeHtml(intro)}</div>
     <div class="personal-word-list">
-      ${visible.map((word) => `
-        <div class="personal-word ${word.blocked ? 'blocked' : ''}">
+      ${visible.map((word) => {
+        const missingLists = Object.values(personalDictionary.lists || {})
+          .map((list) => list.name)
+          .filter((name) => !word.lists.includes(name))
+          .sort((a, b) => a.localeCompare(b, 'de'));
+        return `
+        <div class="personal-word ${word.blocked ? 'blocked' : ''}" data-personal-word-grid="${escapeHtml(word.grid)}">
           <div>
             <strong>${escapeHtml(word.original)}</strong>
-            <span class="word-meta">${escapeHtml(word.grid)} · ${word.grid.length} · ${word.lists.map(escapeHtml).join(', ')}</span>
+            <span class="word-meta">${escapeHtml(word.grid)} · ${word.grid.length} · Listen: ${word.lists.map(escapeHtml).join(', ')}</span>
           </div>
           <div class="personal-word-actions">
+            ${missingLists.length ? `<select class="mini-select" data-personal-list-target>
+              <option value="">zu Liste hinzufügen …</option>
+              ${missingLists.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')}
+            </select>
+            <button class="mini ghost" type="button" data-personal-add-to-list="${escapeHtml(word.grid)}">hinzufügen</button>` : '<span class="word-meta">in allen Listen</span>'}
             <button class="mini ghost" type="button" data-personal-toggle-block="${escapeHtml(word.grid)}">${word.blocked ? 'freigeben' : 'sperren'}</button>
-            <button class="mini ghost" type="button" data-personal-remove="${escapeHtml(word.grid)}">aus Liste entfernen</button>
+            <button class="mini ghost" type="button" data-personal-remove="${escapeHtml(word.grid)}">aus aktueller Liste entfernen</button>
           </div>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>
     ${words.length > visible.length ? `<div class="word-meta">Weitere ${formatNumber(words.length - visible.length)} Wörter ausgeblendet.</div>` : ''}`;
 }
@@ -389,11 +435,17 @@ function useSelectedPersonalList() {
   const words = getPersonalWordsForList(personalDictionary.selectedList).filter((word) => !word.blocked);
   if (!words.length) {
     setMessages([{ type: 'error', text: 'Die ausgewählte persönliche Liste enthält keine verwendbaren Wörter.' }]);
-    return;
+    return false;
   }
   els.wordInput.value = words.map((word) => word.original).join('\n');
   saveState();
   setMessages([{ type: 'ok', text: `${formatNumber(words.length)} Wörter aus „${personalDictionary.selectedList}“ wurden als Zusatz-/Wunschwörter übernommen.` }]);
+  return true;
+}
+
+function createPuzzleFromSelectedPersonalList() {
+  if (!useSelectedPersonalList()) return;
+  createPuzzle();
 }
 
 function exportPersonalDictionary() {
@@ -417,16 +469,18 @@ async function importPersonalWordFile(file) {
   if (!file) return;
   const text = await file.text();
   const words = parsePersonalWordList(text);
+  const targetLists = getSelectedPersonalTargetLists();
   let added = 0;
   let skipped = 0;
   words.forEach((word) => {
-    const result = upsertPersonalWord(word, personalDictionary.selectedList);
+    const result = upsertPersonalWord(word, targetLists);
     if (result.ok) added += 1;
     else skipped += 1;
   });
   savePersonalDictionary();
   renderPersonalDictionaryUi();
-  setMessages([{ type: 'ok', text: `${formatNumber(added)} Wörter wurden in „${personalDictionary.selectedList}“ importiert.` }, ...(skipped ? [{ text: `${formatNumber(skipped)} Zeilen konnten nicht importiert werden.` }] : [])]);
+  const listLabel = targetLists.join(', ');
+  setMessages([{ type: 'ok', text: `${formatNumber(added)} Wörter wurden in ${targetLists.length === 1 ? '„' + listLabel + '“' : 'die Listen „' + listLabel + '“'} importiert.` }, ...(skipped ? [{ text: `${formatNumber(skipped)} Zeilen konnten nicht importiert werden.` }] : [])]);
 }
 
 function extractDictionaryWord(line, index) {
@@ -1557,7 +1611,7 @@ function renderLists() {
   currentPuzzle.parseIssues.forEach((issue) => items.push(`<li>${escapeHtml(issue)}</li>`));
   currentPuzzle.unplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
   if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Wörter wegen Maximalgrenze nicht verarbeitet.</li>`);
-  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.4.1 sauber erzeugt.</li>');
+  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.5.0 sauber erzeugt.</li>');
   els.unplacedList.innerHTML = items.join('');
 }
 
@@ -1670,7 +1724,7 @@ function createPuzzle() {
   els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
-    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.4.1 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.5.0 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
   ]);
   updateButtons(Boolean(placedCount));
   saveState();
@@ -1876,7 +1930,8 @@ if (els.personalCreateList) {
 
 if (els.personalAddWord) {
   els.personalAddWord.addEventListener('click', () => {
-    const result = upsertPersonalWord(els.personalWordInput.value, personalDictionary.selectedList);
+    const targetLists = getSelectedPersonalTargetLists();
+    const result = upsertPersonalWord(els.personalWordInput.value, targetLists);
     if (!result.ok) {
       setMessages([{ type: 'error', text: result.reason }]);
       return;
@@ -1884,7 +1939,7 @@ if (els.personalAddWord) {
     els.personalWordInput.value = '';
     savePersonalDictionary();
     renderPersonalDictionaryUi();
-    setMessages([{ type: 'ok', text: `${result.word.original} wurde in „${personalDictionary.selectedList}“ gespeichert.` }]);
+    setMessages([{ type: 'ok', text: `${result.word.original} wurde in ${targetLists.length === 1 ? '„' + targetLists[0] + '“' : 'mehreren Listen'} gespeichert.` }]);
   });
   els.personalWordInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
@@ -1896,6 +1951,10 @@ if (els.personalAddWord) {
 
 if (els.personalUseList) {
   els.personalUseList.addEventListener('click', useSelectedPersonalList);
+}
+
+if (els.personalCreatePuzzleFromList) {
+  els.personalCreatePuzzleFromList.addEventListener('click', createPuzzleFromSelectedPersonalList);
 }
 
 if (els.personalFile) {
@@ -1928,6 +1987,22 @@ if (els.personalResults) {
       renderPersonalDictionaryUi();
       renderDictionaryResults();
       setMessages([{ type: 'ok', text: `${grid} wurde ${personalDictionary.words[grid].blocked ? 'gesperrt' : 'freigegeben'}.` }]);
+      return;
+    }
+    const addToListButton = event.target.closest('button[data-personal-add-to-list]');
+    if (addToListButton) {
+      const grid = addToListButton.dataset.personalAddToList;
+      const row = addToListButton.closest('[data-personal-word-grid]');
+      const picker = row && row.querySelector('[data-personal-list-target]');
+      const listName = picker && picker.value;
+      if (!listName) {
+        setMessages([{ type: 'error', text: 'Bitte zuerst eine Zielliste auswählen.' }]);
+        return;
+      }
+      addPersonalWordToList(grid, listName);
+      savePersonalDictionary();
+      renderPersonalDictionaryUi();
+      setMessages([{ type: 'ok', text: `${grid} wurde zusätzlich in „${listName}“ gespeichert.` }]);
       return;
     }
     const removeButton = event.target.closest('button[data-personal-remove]');
@@ -2136,5 +2211,5 @@ loadState();
 renderPersonalDictionaryUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.4.1. Der deutsche Vollfundus ist aktiv, und Dein persönlicher Wortschatz kann jetzt mit Listen gepflegt werden.' }]);
+  setMessages([{ text: 'Bereit für v0.5.0. Der deutsche Vollfundus ist aktiv, und Dein persönlicher Wortschatz unterstützt jetzt Mehrfachlisten.' }]);
 });
