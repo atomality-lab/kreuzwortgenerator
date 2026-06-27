@@ -1,8 +1,29 @@
-# Kreuzwortdrucker v0.4.0
+# Kreuzwortdrucker v0.4.1
 
 PWA-Prototyp zum Erzeugen, Bearbeiten und Exportieren von Kreuzworträtseln für Buchsatz/Canva.
 
-## Enthalten in v0.4.0
+## Enthalten in v0.4.1
+
+### Korrekturen
+
+- Unicode-Umlautnormalisierung repariert
+- Wörter mit zerlegten Umlauten werden jetzt korrekt umgesetzt
+- Beispiele:
+  - Fächer → FAECHER
+  - ähneln → AEHNELN
+  - Gedärm → GEDAERM
+- persönlicher Wortschatz aus v0.4.0 wird automatisch übernommen
+- Service-Worker-Cache auf v0.4.1 erhöht
+- umlautlose Parallelformen aus der Wörterbuchquelle werden bevorzugt entfernt, wenn eine Umlautform vorhanden ist, z. B. `ahneln` zugunsten von `ähneln`
+
+### Neue Ausgabeoption
+
+Im Bereich „Leitwörter und Ausgabe“ gibt es jetzt die Einstellung **Gitterdarstellung**:
+
+- **Rechteck mit schwarzen Feldern**
+- **Begrenzungslinien ohne schwarze Felder**
+
+Wichtig: Der Linienmodus ist in v0.4.1 zunächst eine Darstellungs-/Exportoption für das aktuell erzeugte Gitter. Der spätere kompakte Vollraster-Generator ohne schwarze Felder, bei dem alle Felder eines Formats wie 22 × 15 belegt sind und Wortgrenzen durch Linien entstehen, ist eine eigene Generatorstufe.
 
 ### Persönlicher Wortschatz
 
@@ -34,7 +55,7 @@ PWA-Prototyp zum Erzeugen, Bearbeiten und Exportieren von Kreuzworträtseln für
 - maximale Wortanzahl einstellbar
 - optionale Leitwörter waagrecht/senkrecht
 - automatische Platzierung als Freiform-im-Format
-- ungenutzte Felder werden beim Export schwarz dargestellt
+- ungenutzte Felder werden je nach Darstellungsmodus schwarz oder unsichtbar dargestellt
 - automatische Nummerierung
 - leere und gelöste Ansicht
 - Lösungsliste waagrecht/senkrecht
@@ -76,7 +97,7 @@ http://localhost:8000
 6. Rätsel neu erzeugen.
 7. Fragen erfassen und Exportdateien erzeugen.
 
-Die eigentliche Zwei-Schritt-Logik „erst Themenliste platzieren, danach Lücken mit Datenbankwörtern füllen“ ist für die nächste Ausbaustufe vorbereitet, aber in v0.4.0 noch nicht vollständig getrennt umgesetzt.
+Die eigentliche Zwei-Schritt-Logik „erst Themenliste platzieren, danach Lücken mit Datenbankwörtern füllen“ ist für die nächste Ausbaustufe vorbereitet, aber in v0.4.1 noch nicht vollständig getrennt umgesetzt.
 
 ## Wichtige Hinweise
 
@@ -105,3 +126,10 @@ Der Generator ist weiterhin ein Prototyp. Er nutzt den großen deutschen Fundus 
 - persönliche Wörter klar markieren
 - nicht platzierte Themenwörter separat anzeigen
 - optional danach zweiter Schritt „Lücken füllen“ vorbereiten
+
+### Spätere Generatorstufe: Kompaktes Vollraster mit Begrenzungslinien
+
+- Format wie 22 × 15 vollständig belegen
+- keine schwarzen Felder
+- Wortgrenzen durch Begrenzungslinien
+- waagrechte und senkrechte Segmente konsistent aus Wörterbuch/Persönlichem Wortschatz füllen

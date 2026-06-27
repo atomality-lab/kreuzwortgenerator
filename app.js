@@ -1,7 +1,7 @@
 'use strict';
 
-const VERSION = '0.4.0';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.4.0.lastState';
+const VERSION = '0.4.1';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.4.1.lastState';
 const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
@@ -19,6 +19,7 @@ const els = {
   seedAcross: document.querySelector('#seedAcross'),
   seedDown: document.querySelector('#seedDown'),
   cropToContent: document.querySelector('#cropToContent'),
+  gridDisplayMode: document.querySelector('#gridDisplayMode'),
   cellSize: document.querySelector('#cellSize'),
   baseName: document.querySelector('#baseName'),
   wordInput: document.querySelector('#wordInput'),
@@ -79,23 +80,58 @@ let clueBank = {};
 let importedDictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [] };
 let dictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [], builtInCount: 0, importedCount: 0, importSourceName: '' };
 let dictionaryIndex = new Map();
-const PERSONAL_STORAGE_KEY = 'kreuzwortdrucker.v0.4.0.personalDictionary';
+const PERSONAL_STORAGE_KEY = 'kreuzwortdrucker.personalDictionary';
+const LEGACY_PERSONAL_STORAGE_KEYS = ['kreuzwortdrucker.v0.4.0.personalDictionary'];
 const DEFAULT_PERSONAL_LIST = 'Allgemein';
 let personalDictionary = createEmptyPersonalDictionary();
 
 function normalizeWord(raw) {
   const original = String(raw || '').trim();
-  const grid = original
-    .normalize('NFC')
-    .toUpperCase()
+  const upper = original.normalize('NFD').toUpperCase();
+  const grid = upper
+    .replace(/A\u0308/g, 'AE')
+    .replace(/O\u0308/g, 'OE')
+    .replace(/U\u0308/g, 'UE')
     .replaceAll('Ä', 'AE')
     .replaceAll('Ö', 'OE')
     .replaceAll('Ü', 'UE')
     .replaceAll('ẞ', 'SS')
     .replaceAll('ß', 'SS')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[\s\-–—_]+/g, '')
     .replace(/[^A-Z]/g, '');
   return { original, grid };
+}
+
+function hasGermanUmlaut(raw) {
+  const decomposed = String(raw || '').normalize('NFD');
+  return /[AOUaou]\u0308/.test(decomposed) || /[ÄÖÜäöü]/.test(String(raw || ''));
+}
+
+function getBareUmlautKey(raw) {
+  const original = String(raw || '').trim();
+  return original
+    .normalize('NFD')
+    .toUpperCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replaceAll('ẞ', 'SS')
+    .replaceAll('ß', 'SS')
+    .replace(/[\s\-–—_]+/g, '')
+    .replace(/[^A-Z]/g, '');
+}
+
+const UMLAUTLESS_MINIMAL_PAIR_ALLOWLIST = new Set([
+  'SCHON', 'WARE', 'WAREN', 'MULL', 'LOSEN', 'LOSE', 'LOST',
+  'FORDERN', 'FORDERE', 'FORDERST', 'FORDERT', 'FORDERTE', 'FORDERTEN', 'FORDERTEST', 'FORDERTET',
+  'MOCHTE', 'MOCHTEN', 'MOCHTEST', 'MOCHTET',
+  'WURDE', 'WURDEN', 'WURDEST', 'WURDET'
+]);
+
+function isUmlautlessDictionaryVariant(item, plainKeysWithUmlaut) {
+  if (!item || item.hasUmlaut) return false;
+  if (!item.plainKey || !plainKeysWithUmlaut.has(item.plainKey)) return false;
+  if (UMLAUTLESS_MINIMAL_PAIR_ALLOWLIST.has(item.clean.grid)) return false;
+  return item.clean.grid === item.plainKey;
 }
 
 
@@ -191,8 +227,15 @@ function savePersonalDictionary() {
 
 function loadPersonalDictionary() {
   try {
-    const raw = localStorage.getItem(PERSONAL_STORAGE_KEY);
+    let raw = localStorage.getItem(PERSONAL_STORAGE_KEY);
+    if (!raw) {
+      for (const legacyKey of LEGACY_PERSONAL_STORAGE_KEYS) {
+        raw = localStorage.getItem(legacyKey);
+        if (raw) break;
+      }
+    }
     personalDictionary = normalizePersonalDictionary(raw ? JSON.parse(raw) : null);
+    if (raw) savePersonalDictionary();
   } catch (error) {
     console.warn('Persönlicher Wortschatz konnte nicht geladen werden:', error);
     personalDictionary = createEmptyPersonalDictionary();
@@ -405,8 +448,12 @@ function analyzeDictionaryText(text, sourceName, minImportLength = 3) {
     tooShort: 0,
     duplicateLines: 0,
     ambiguousGridForms: 0,
+    umlautlessVariantsSkipped: 0,
     minImportLength,
   };
+
+  const parsedItems = [];
+  const plainKeysWithUmlaut = new Set();
 
   lines.forEach((line, index) => {
     const word = extractDictionaryWord(line, index);
@@ -418,6 +465,21 @@ function analyzeDictionaryText(text, sourceName, minImportLength = 3) {
     }
     if (clean.grid.length < minImportLength) {
       stats.tooShort += 1;
+      return;
+    }
+    const item = {
+      clean,
+      plainKey: getBareUmlautKey(word),
+      hasUmlaut: hasGermanUmlaut(word),
+    };
+    if (item.hasUmlaut && item.plainKey) plainKeysWithUmlaut.add(item.plainKey);
+    parsedItems.push(item);
+  });
+
+  parsedItems.forEach((item) => {
+    const clean = item.clean;
+    if (isUmlautlessDictionaryVariant(item, plainKeysWithUmlaut)) {
+      stats.umlautlessVariantsSkipped += 1;
       return;
     }
     if (!groups.has(clean.grid)) {
@@ -433,6 +495,9 @@ function analyzeDictionaryText(text, sourceName, minImportLength = 3) {
       stats.duplicateLines += 1;
     } else {
       group.originals.add(clean.original);
+      if (hasGermanUmlaut(clean.original) && !hasGermanUmlaut(group.preferred.original)) {
+        group.preferred = { original: clean.original, grid: clean.grid, length: clean.grid.length, source: 'dictionary' };
+      }
     }
   });
 
@@ -625,6 +690,11 @@ function getShortWordTypeLabel(type) {
   if (type === 'adjective') return 'Adj.';
   if (type === 'verb') return 'Verb';
   return 'Andere';
+}
+
+function getGridDisplayLabel(mode) {
+  if (mode === 'lines') return 'Begrenzungslinien';
+  return 'Schwarze Felder';
 }
 
 function countWordTypes(entries = []) {
@@ -828,10 +898,11 @@ function updateDictionaryUi() {
     ? `<br><span class="word-meta">Zusatzliste: ${escapeHtml(dictionaryState.importSourceName)} · ${formatNumber(dictionaryState.importedCount)} importierte Einträge</span>`
     : '<br><span class="word-meta">Keine Zusatzliste importiert. Du kannst fremdsprachige oder eigene Wörter zusätzlich laden.</span>';
   const ambiguous = stats.ambiguousGridForms ? ` · ${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen erkannt` : '';
+  const umlautless = stats.umlautlessVariantsSkipped ? ` · ${formatNumber(stats.umlautlessVariantsSkipped)} umlautlose Parallelformen entfernt` : '';
   const filterInfo = `<br><span class="word-meta">Aktiver Wortformenfilter: ${escapeHtml(getWordFormModeLabel(settings.wordFormMode))} · Wortarten-Gewichtung ${escapeHtml(formatWordTypeWeights(settings))} · ${formatNumber(filteredCount)} Wörter nach aktueller Länge/Form nutzbar</span>`;
   els.dictionaryStatus.innerHTML = `
     <strong>${escapeHtml(dictionaryState.sourceName)}</strong><br>
-    ${formatNumber(stats.usable)} nutzbare Wörter verfügbar · davon ${formatNumber(dictionaryState.builtInCount)} eingebaut · ${formatNumber(stats.tooShort)} sehr kurze Wörter ausgeschlossen${escapeHtml(ambiguous)}
+    ${formatNumber(stats.usable)} nutzbare Wörter verfügbar · davon ${formatNumber(dictionaryState.builtInCount)} eingebaut · ${formatNumber(stats.tooShort)} sehr kurze Wörter ausgeschlossen${escapeHtml(ambiguous)}${escapeHtml(umlautless)}
     ${filterInfo}
     ${importedInfo}`;
   renderDictionaryResults();
@@ -1429,6 +1500,7 @@ function buildSvg(puzzle, view, settings) {
   const letterSize = Math.max(14, Math.round(cell * 0.50));
   const lines = [];
   const showSolution = view === 'solution';
+  const displayMode = settings.displayMode || 'black';
 
   lines.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" role="img" aria-label="Kreuzworträtsel">`);
   lines.push(`<rect width="100%" height="100%" fill="white"/>`);
@@ -1439,10 +1511,13 @@ function buildSvg(puzzle, view, settings) {
       const y = padding + (r - bounds.minRow) * cell;
       const letter = puzzle.grid[r][c];
       if (!letter) {
-        lines.push(`<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="#111111"/>`);
+        if (displayMode === 'black') {
+          lines.push(`<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="#111111"/>`);
+        }
         continue;
       }
-      lines.push(`<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="white" stroke="#111111" stroke-width="1.6"/>`);
+      const strokeWidth = displayMode === 'lines' ? 1.8 : 1.6;
+      lines.push(`<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="white" stroke="#111111" stroke-width="${strokeWidth}"/>`);
       const number = puzzle.numbers.get(`${r},${c}`);
       if (number) {
         lines.push(`<text x="${x + Math.round(cell * 0.08)}" y="${y + Math.round(cell * 0.26)}" font-family="Arial, Helvetica, sans-serif" font-size="${numberSize}" font-weight="700" fill="#111111">${number}</text>`);
@@ -1482,7 +1557,7 @@ function renderLists() {
   currentPuzzle.parseIssues.forEach((issue) => items.push(`<li>${escapeHtml(issue)}</li>`));
   currentPuzzle.unplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
   if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Wörter wegen Maximalgrenze nicht verarbeitet.</li>`);
-  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.4.0 sauber erzeugt.</li>');
+  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.4.1 sauber erzeugt.</li>');
   els.unplacedList.innerHTML = items.join('');
 }
 
@@ -1555,6 +1630,7 @@ function getSettings() {
     seedAcross: els.seedAcross.value,
     seedDown: els.seedDown.value,
     cropToContent: els.cropToContent.checked,
+    displayMode: els.gridDisplayMode ? els.gridDisplayMode.value : 'black',
     cellSize: clampNumber(els.cellSize.value, 20, 120, 42),
     baseName: sanitizeFileBase(els.baseName.value || 'raetsel_001'),
     wordText: els.wordInput.value,
@@ -1591,10 +1667,10 @@ function createPuzzle() {
   const used = getUsedCells(currentPuzzle.grid).length;
   const placedCount = currentPuzzle.placed.length;
   const unplacedCount = currentPuzzle.unplaced.length;
-  els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}.`;
+  els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
-    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.4.0 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.4.1 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
   ]);
   updateButtons(Boolean(placedCount));
   saveState();
@@ -1704,6 +1780,7 @@ function saveState() {
       seedAcross: els.seedAcross.value,
       seedDown: els.seedDown.value,
       cropToContent: els.cropToContent.checked,
+      gridDisplayMode: els.gridDisplayMode ? els.gridDisplayMode.value : 'black',
       cellSize: els.cellSize.value,
       baseName: els.baseName.value,
       wordInput: els.wordInput.value,
@@ -1753,6 +1830,7 @@ function resetState() {
   els.seedAcross.value = '';
   els.seedDown.value = '';
   els.cropToContent.checked = true;
+  if (els.gridDisplayMode) els.gridDisplayMode.value = 'black';
   els.cellSize.value = '42';
   els.baseName.value = 'raetsel_001';
   els.wordInput.value = '';
@@ -1919,7 +1997,7 @@ if (els.dictionarySearch) {
   });
 }
 
-[els.minLength, els.gridWidth, els.gridHeight, els.maxWords, els.wordFormMode, els.nounWeight, els.adjectiveWeight, els.verbWeight, els.otherWeight].filter(Boolean).forEach((input) => {
+[els.minLength, els.gridWidth, els.gridHeight, els.maxWords, els.wordFormMode, els.nounWeight, els.adjectiveWeight, els.verbWeight, els.otherWeight, els.gridDisplayMode].filter(Boolean).forEach((input) => {
   input.addEventListener('change', () => {
     renderDictionaryResults();
     saveState();
@@ -1960,7 +2038,7 @@ els.solutionViewButton.addEventListener('click', () => {
   renderPuzzle();
 });
 
-[els.cropToContent, els.cellSize].forEach((input) => input.addEventListener('change', () => {
+[els.cropToContent, els.cellSize, els.gridDisplayMode].filter(Boolean).forEach((input) => input.addEventListener('change', () => {
   saveState();
   renderPuzzle();
 }));
@@ -2058,5 +2136,5 @@ loadState();
 renderPersonalDictionaryUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.4.0. Der deutsche Vollfundus ist aktiv, und Dein persönlicher Wortschatz kann jetzt mit Listen gepflegt werden.' }]);
+  setMessages([{ text: 'Bereit für v0.4.1. Der deutsche Vollfundus ist aktiv, und Dein persönlicher Wortschatz kann jetzt mit Listen gepflegt werden.' }]);
 });
