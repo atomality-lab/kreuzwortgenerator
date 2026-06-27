@@ -1,8 +1,8 @@
 'use strict';
 
-const VERSION = '0.3.4';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.3.4.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.4.0';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.4.0.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
@@ -29,6 +29,18 @@ const els = {
   dictionaryStatus: document.querySelector('#dictionaryStatus'),
   dictionarySearch: document.querySelector('#dictionarySearch'),
   dictionaryResults: document.querySelector('#dictionaryResults'),
+  personalStatus: document.querySelector('#personalStatus'),
+  personalListSelect: document.querySelector('#personalListSelect'),
+  personalListName: document.querySelector('#personalListName'),
+  personalCreateList: document.querySelector('#personalCreateList'),
+  personalUseList: document.querySelector('#personalUseList'),
+  personalWordInput: document.querySelector('#personalWordInput'),
+  personalAddWord: document.querySelector('#personalAddWord'),
+  personalFile: document.querySelector('#personalFile'),
+  personalSearch: document.querySelector('#personalSearch'),
+  personalResults: document.querySelector('#personalResults'),
+  personalExportJson: document.querySelector('#personalExportJson'),
+  personalImportJson: document.querySelector('#personalImportJson'),
   generateButton: document.querySelector('#generateButton'),
   exampleButton: document.querySelector('#exampleButton'),
   resetButton: document.querySelector('#resetButton'),
@@ -67,6 +79,9 @@ let clueBank = {};
 let importedDictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [] };
 let dictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [], builtInCount: 0, importedCount: 0, importSourceName: '' };
 let dictionaryIndex = new Map();
+const PERSONAL_STORAGE_KEY = 'kreuzwortdrucker.v0.4.0.personalDictionary';
+const DEFAULT_PERSONAL_LIST = 'Allgemein';
+let personalDictionary = createEmptyPersonalDictionary();
 
 function normalizeWord(raw) {
   const original = String(raw || '').trim();
@@ -83,6 +98,293 @@ function normalizeWord(raw) {
   return { original, grid };
 }
 
+
+
+function createEmptyPersonalDictionary() {
+  return {
+    version: VERSION,
+    selectedList: DEFAULT_PERSONAL_LIST,
+    lists: { [DEFAULT_PERSONAL_LIST]: { name: DEFAULT_PERSONAL_LIST, wordGrids: [] } },
+    words: {},
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function sanitizeListName(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ').slice(0, 60) || DEFAULT_PERSONAL_LIST;
+}
+
+function ensurePersonalList(name) {
+  const listName = sanitizeListName(name);
+  if (!personalDictionary.lists) personalDictionary.lists = {};
+  if (!personalDictionary.lists[listName]) {
+    personalDictionary.lists[listName] = { name: listName, wordGrids: [] };
+  }
+  if (!personalDictionary.selectedList) personalDictionary.selectedList = listName;
+  return personalDictionary.lists[listName];
+}
+
+function normalizePersonalDictionary(data) {
+  const next = createEmptyPersonalDictionary();
+  if (!data || typeof data !== 'object') return next;
+  next.words = {};
+  next.lists = {};
+  const sourceLists = data.lists && typeof data.lists === 'object' ? data.lists : {};
+  Object.values(sourceLists).forEach((list) => {
+    const listName = sanitizeListName(list && (list.name || list.id));
+    if (!next.lists[listName]) next.lists[listName] = { name: listName, wordGrids: [] };
+  });
+  if (!Object.keys(next.lists).length) next.lists[DEFAULT_PERSONAL_LIST] = { name: DEFAULT_PERSONAL_LIST, wordGrids: [] };
+
+  const addToList = (grid, listName) => {
+    const cleanListName = sanitizeListName(listName);
+    if (!next.lists[cleanListName]) next.lists[cleanListName] = { name: cleanListName, wordGrids: [] };
+    if (!next.lists[cleanListName].wordGrids.includes(grid)) next.lists[cleanListName].wordGrids.push(grid);
+  };
+
+  const sourceWords = data.words && typeof data.words === 'object' ? data.words : {};
+  Object.values(sourceWords).forEach((word) => {
+    const clean = normalizeWord(word.original || word.grid || '');
+    if (!clean.grid) return;
+    const lists = Array.isArray(word.lists) && word.lists.length ? word.lists.map(sanitizeListName) : [DEFAULT_PERSONAL_LIST];
+    next.words[clean.grid] = {
+      original: word.original || clean.original || clean.grid,
+      grid: clean.grid,
+      blocked: Boolean(word.blocked),
+      lists: Array.from(new Set(lists)),
+      createdAt: word.createdAt || new Date().toISOString(),
+      updatedAt: word.updatedAt || new Date().toISOString(),
+    };
+    lists.forEach((listName) => addToList(clean.grid, listName));
+  });
+
+  Object.entries(sourceLists).forEach(([key, list]) => {
+    const listName = sanitizeListName(list && (list.name || key));
+    const grids = Array.isArray(list && list.wordGrids) ? list.wordGrids : [];
+    grids.forEach((grid) => {
+      const clean = normalizeWord(grid);
+      if (!clean.grid) return;
+      if (!next.words[clean.grid]) {
+        next.words[clean.grid] = {
+          original: clean.original || clean.grid,
+          grid: clean.grid,
+          blocked: false,
+          lists: [listName],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      if (!next.words[clean.grid].lists.includes(listName)) next.words[clean.grid].lists.push(listName);
+      addToList(clean.grid, listName);
+    });
+  });
+
+  next.selectedList = next.lists[sanitizeListName(data.selectedList)] ? sanitizeListName(data.selectedList) : Object.keys(next.lists)[0];
+  next.updatedAt = data.updatedAt || new Date().toISOString();
+  return next;
+}
+
+function savePersonalDictionary() {
+  personalDictionary.updatedAt = new Date().toISOString();
+  localStorage.setItem(PERSONAL_STORAGE_KEY, JSON.stringify(personalDictionary));
+}
+
+function loadPersonalDictionary() {
+  try {
+    const raw = localStorage.getItem(PERSONAL_STORAGE_KEY);
+    personalDictionary = normalizePersonalDictionary(raw ? JSON.parse(raw) : null);
+  } catch (error) {
+    console.warn('Persönlicher Wortschatz konnte nicht geladen werden:', error);
+    personalDictionary = createEmptyPersonalDictionary();
+  }
+}
+
+function upsertPersonalWord(rawWord, listName = personalDictionary.selectedList || DEFAULT_PERSONAL_LIST) {
+  const clean = normalizeWord(rawWord);
+  if (!clean.original || !clean.grid) return { ok: false, reason: 'Keine gültigen Buchstaben gefunden.' };
+  const targetListName = sanitizeListName(listName);
+  const list = ensurePersonalList(targetListName);
+  const now = new Date().toISOString();
+  const existing = personalDictionary.words[clean.grid];
+  if (existing) {
+    existing.original = existing.original || clean.original;
+    existing.updatedAt = now;
+    if (!existing.lists.includes(targetListName)) existing.lists.push(targetListName);
+  } else {
+    personalDictionary.words[clean.grid] = {
+      original: clean.original,
+      grid: clean.grid,
+      blocked: false,
+      lists: [targetListName],
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+  if (!list.wordGrids.includes(clean.grid)) list.wordGrids.push(clean.grid);
+  personalDictionary.selectedList = targetListName;
+  return { ok: true, word: personalDictionary.words[clean.grid] };
+}
+
+function removePersonalWordFromList(grid, listName = personalDictionary.selectedList) {
+  const clean = normalizeWord(grid);
+  const targetListName = sanitizeListName(listName);
+  const list = personalDictionary.lists[targetListName];
+  if (!clean.grid || !list) return;
+  list.wordGrids = list.wordGrids.filter((value) => value !== clean.grid);
+  const word = personalDictionary.words[clean.grid];
+  if (word) {
+    word.lists = word.lists.filter((name) => name !== targetListName);
+    if (!word.lists.length) delete personalDictionary.words[clean.grid];
+  }
+}
+
+function setPersonalWordBlocked(grid, blocked) {
+  const clean = normalizeWord(grid);
+  if (!clean.grid) return;
+  if (!personalDictionary.words[clean.grid]) {
+    upsertPersonalWord(clean.original || clean.grid, personalDictionary.selectedList || DEFAULT_PERSONAL_LIST);
+  }
+  if (personalDictionary.words[clean.grid]) {
+    personalDictionary.words[clean.grid].blocked = Boolean(blocked);
+    personalDictionary.words[clean.grid].updatedAt = new Date().toISOString();
+  }
+}
+
+function getPersonalBlockedGridSet() {
+  const set = new Set();
+  Object.values(personalDictionary.words || {}).forEach((word) => {
+    if (word.blocked && word.grid) set.add(word.grid);
+  });
+  return set;
+}
+
+function getPersonalWordsForList(listName = personalDictionary.selectedList) {
+  const list = personalDictionary.lists[sanitizeListName(listName)];
+  if (!list) return [];
+  return list.wordGrids
+    .map((grid) => personalDictionary.words[grid])
+    .filter(Boolean)
+    .sort((a, b) => a.original.localeCompare(b.original, 'de'));
+}
+
+function getPersonalStats() {
+  const words = Object.values(personalDictionary.words || {});
+  return {
+    listCount: Object.keys(personalDictionary.lists || {}).length,
+    wordCount: words.length,
+    blockedCount: words.filter((word) => word.blocked).length,
+  };
+}
+
+function parsePersonalWordList(text) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\uFEFF/, '').trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const firstColumn = line.split(/[;\t,]/)[0].trim();
+      return firstColumn ? [firstColumn] : [];
+    });
+}
+
+function renderPersonalDictionaryUi() {
+  if (!els.personalStatus) return;
+  ensurePersonalList(personalDictionary.selectedList || DEFAULT_PERSONAL_LIST);
+  const lists = Object.values(personalDictionary.lists).sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  els.personalListSelect.innerHTML = lists.map((list) => `<option value="${escapeHtml(list.name)}">${escapeHtml(list.name)} (${formatNumber(list.wordGrids.length)})</option>`).join('');
+  els.personalListSelect.value = personalDictionary.selectedList;
+
+  const stats = getPersonalStats();
+  const selectedWords = getPersonalWordsForList(personalDictionary.selectedList);
+  const allowedInList = selectedWords.filter((word) => !word.blocked).length;
+  els.personalStatus.innerHTML = `
+    <strong>${escapeHtml(personalDictionary.selectedList)}</strong><br>
+    ${formatNumber(stats.wordCount)} persönliche Wörter in ${formatNumber(stats.listCount)} Listen · ${formatNumber(stats.blockedCount)} gesperrt · ${formatNumber(allowedInList)} in der aktuellen Liste verwendbar`;
+  renderPersonalResults();
+}
+
+function renderPersonalResults() {
+  if (!els.personalResults) return;
+  const queryRaw = els.personalSearch.value.trim();
+  const query = normalizeWord(queryRaw).grid;
+  let words = getPersonalWordsForList(personalDictionary.selectedList);
+  if (query) {
+    const rawUpper = queryRaw.toUpperCase();
+    words = Object.values(personalDictionary.words || {})
+      .filter((word) => word.grid.includes(query) || word.original.toUpperCase().includes(rawUpper) || word.lists.some((list) => list.toUpperCase().includes(rawUpper)))
+      .sort((a, b) => a.original.localeCompare(b.original, 'de'));
+  }
+  const visible = words.slice(0, 160);
+  if (!visible.length) {
+    els.personalResults.classList.add('empty-clue-list');
+    els.personalResults.textContent = query ? 'Keine persönlichen Wörter gefunden.' : 'Diese Liste ist noch leer.';
+    return;
+  }
+  els.personalResults.classList.remove('empty-clue-list');
+  const intro = query
+    ? `${formatNumber(words.length)} Treffer im persönlichen Wortschatz`
+    : `${formatNumber(words.length)} Wörter in dieser Liste`;
+  els.personalResults.innerHTML = `
+    <div class="dictionary-result-summary">${escapeHtml(intro)}</div>
+    <div class="personal-word-list">
+      ${visible.map((word) => `
+        <div class="personal-word ${word.blocked ? 'blocked' : ''}">
+          <div>
+            <strong>${escapeHtml(word.original)}</strong>
+            <span class="word-meta">${escapeHtml(word.grid)} · ${word.grid.length} · ${word.lists.map(escapeHtml).join(', ')}</span>
+          </div>
+          <div class="personal-word-actions">
+            <button class="mini ghost" type="button" data-personal-toggle-block="${escapeHtml(word.grid)}">${word.blocked ? 'freigeben' : 'sperren'}</button>
+            <button class="mini ghost" type="button" data-personal-remove="${escapeHtml(word.grid)}">aus Liste entfernen</button>
+          </div>
+        </div>`).join('')}
+    </div>
+    ${words.length > visible.length ? `<div class="word-meta">Weitere ${formatNumber(words.length - visible.length)} Wörter ausgeblendet.</div>` : ''}`;
+}
+
+function useSelectedPersonalList() {
+  const words = getPersonalWordsForList(personalDictionary.selectedList).filter((word) => !word.blocked);
+  if (!words.length) {
+    setMessages([{ type: 'error', text: 'Die ausgewählte persönliche Liste enthält keine verwendbaren Wörter.' }]);
+    return;
+  }
+  els.wordInput.value = words.map((word) => word.original).join('\n');
+  saveState();
+  setMessages([{ type: 'ok', text: `${formatNumber(words.length)} Wörter aus „${personalDictionary.selectedList}“ wurden als Zusatz-/Wunschwörter übernommen.` }]);
+}
+
+function exportPersonalDictionary() {
+  const payload = JSON.stringify(personalDictionary, null, 2);
+  downloadText('kreuzwortdrucker_persoenlicher_wortschatz.json', payload, 'application/json;charset=utf-8');
+}
+
+async function importPersonalDictionaryJson(file) {
+  if (!file) return;
+  const text = await file.text();
+  const imported = normalizePersonalDictionary(JSON.parse(text));
+  const before = getPersonalStats();
+  personalDictionary = imported;
+  savePersonalDictionary();
+  renderPersonalDictionaryUi();
+  const after = getPersonalStats();
+  setMessages([{ type: 'ok', text: `Persönlicher Wortschatz importiert: ${formatNumber(after.wordCount)} Wörter in ${formatNumber(after.listCount)} Listen.` }, ...(before.wordCount ? [{ text: 'Der bisherige persönliche Wortschatz wurde durch den Import ersetzt. Vorherige Exporte kannst Du bei Bedarf wieder einspielen.' }] : [])]);
+}
+
+async function importPersonalWordFile(file) {
+  if (!file) return;
+  const text = await file.text();
+  const words = parsePersonalWordList(text);
+  let added = 0;
+  let skipped = 0;
+  words.forEach((word) => {
+    const result = upsertPersonalWord(word, personalDictionary.selectedList);
+    if (result.ok) added += 1;
+    else skipped += 1;
+  });
+  savePersonalDictionary();
+  renderPersonalDictionaryUi();
+  setMessages([{ type: 'ok', text: `${formatNumber(added)} Wörter wurden in „${personalDictionary.selectedList}“ importiert.` }, ...(skipped ? [{ text: `${formatNumber(skipped)} Zeilen konnten nicht importiert werden.` }] : [])]);
+}
 
 function extractDictionaryWord(line, index) {
   let value = String(line || '').replace(/^\uFEFF/, '').trim();
@@ -284,6 +586,7 @@ function getBlockedGridSet(text = '') {
     .map((part) => normalizeWord(part).grid)
     .filter(Boolean)
     .forEach((grid) => set.add(grid));
+  getPersonalBlockedGridSet().forEach((grid) => set.add(grid));
   return set;
 }
 
@@ -496,6 +799,11 @@ function appendBlockedWord(rawWord) {
   }
   const current = els.blockedWordsInput.value.trim();
   els.blockedWordsInput.value = current ? `${current}\n${clean.grid}` : clean.grid;
+  if (personalDictionary.words[clean.grid]) {
+    setPersonalWordBlocked(clean.grid, true);
+    savePersonalDictionary();
+    renderPersonalDictionaryUi();
+  }
   saveState();
   setMessages([{ type: 'ok', text: `${clean.grid} wird künftig ausgeschlossen. Das Rätsel wurde neu erzeugt.` }]);
   createPuzzle();
@@ -1174,7 +1482,7 @@ function renderLists() {
   currentPuzzle.parseIssues.forEach((issue) => items.push(`<li>${escapeHtml(issue)}</li>`));
   currentPuzzle.unplaced.forEach((word) => items.push(`<li><strong>${escapeHtml(word.grid)}</strong>: ${escapeHtml(word.reason)}</li>`));
   if (currentPuzzle.skippedByLimit) items.push(`<li>${currentPuzzle.skippedByLimit} Wörter wegen Maximalgrenze nicht verarbeitet.</li>`);
-  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.3.4 sauber erzeugt.</li>');
+  if (!items.length) items.push('<li>Keine Hinweise. Das Rätsel ist für v0.4.0 sauber erzeugt.</li>');
   els.unplacedList.innerHTML = items.join('');
 }
 
@@ -1286,7 +1594,7 @@ function createPuzzle() {
   els.stats.textContent = `${placedCount} Wörter platziert, ${unplacedCount} nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
-    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.3.4 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
+    ...(unplacedCount ? [{ text: `${unplacedCount} Kandidaten konnten in v0.4.0 nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
   ]);
   updateButtons(Boolean(placedCount));
   saveState();
@@ -1463,9 +1771,116 @@ function resetState() {
   els.downClues.textContent = 'Nach dem Erstellen erscheinen hier die Fragenfelder.';
   els.acrossClues.classList.add('empty-clue-list');
   els.downClues.classList.add('empty-clue-list');
-  setMessages([{ text: 'Zurückgesetzt. Der eingebaute Vollfundus bleibt aktiv; eine importierte Zusatzliste bleibt erhalten.' }]);
+  setMessages([{ text: 'Zurückgesetzt. Der eingebaute Vollfundus, die importierte Zusatzliste und Dein persönlicher Wortschatz bleiben erhalten.' }]);
 }
 
+
+
+if (els.personalListSelect) {
+  els.personalListSelect.addEventListener('change', () => {
+    personalDictionary.selectedList = sanitizeListName(els.personalListSelect.value);
+    savePersonalDictionary();
+    renderPersonalDictionaryUi();
+  });
+}
+
+if (els.personalCreateList) {
+  els.personalCreateList.addEventListener('click', () => {
+    const listName = sanitizeListName(els.personalListName.value);
+    ensurePersonalList(listName);
+    personalDictionary.selectedList = listName;
+    els.personalListName.value = '';
+    savePersonalDictionary();
+    renderPersonalDictionaryUi();
+    setMessages([{ type: 'ok', text: `Liste „${listName}“ wurde angelegt oder ausgewählt.` }]);
+  });
+}
+
+if (els.personalAddWord) {
+  els.personalAddWord.addEventListener('click', () => {
+    const result = upsertPersonalWord(els.personalWordInput.value, personalDictionary.selectedList);
+    if (!result.ok) {
+      setMessages([{ type: 'error', text: result.reason }]);
+      return;
+    }
+    els.personalWordInput.value = '';
+    savePersonalDictionary();
+    renderPersonalDictionaryUi();
+    setMessages([{ type: 'ok', text: `${result.word.original} wurde in „${personalDictionary.selectedList}“ gespeichert.` }]);
+  });
+  els.personalWordInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      els.personalAddWord.click();
+    }
+  });
+}
+
+if (els.personalUseList) {
+  els.personalUseList.addEventListener('click', useSelectedPersonalList);
+}
+
+if (els.personalFile) {
+  els.personalFile.addEventListener('change', async () => {
+    const file = els.personalFile.files && els.personalFile.files[0];
+    if (!file) return;
+    try {
+      await importPersonalWordFile(file);
+    } catch (error) {
+      console.error(error);
+      setMessages([{ type: 'error', text: 'Die Wortliste konnte nicht importiert werden. Bitte prüfe die Datei.' }]);
+    } finally {
+      els.personalFile.value = '';
+    }
+  });
+}
+
+if (els.personalSearch) {
+  els.personalSearch.addEventListener('input', renderPersonalResults);
+}
+
+if (els.personalResults) {
+  els.personalResults.addEventListener('click', (event) => {
+    const blockButton = event.target.closest('button[data-personal-toggle-block]');
+    if (blockButton) {
+      const grid = blockButton.dataset.personalToggleBlock;
+      const word = personalDictionary.words[grid];
+      setPersonalWordBlocked(grid, !(word && word.blocked));
+      savePersonalDictionary();
+      renderPersonalDictionaryUi();
+      renderDictionaryResults();
+      setMessages([{ type: 'ok', text: `${grid} wurde ${personalDictionary.words[grid].blocked ? 'gesperrt' : 'freigegeben'}.` }]);
+      return;
+    }
+    const removeButton = event.target.closest('button[data-personal-remove]');
+    if (removeButton) {
+      const grid = removeButton.dataset.personalRemove;
+      removePersonalWordFromList(grid, personalDictionary.selectedList);
+      savePersonalDictionary();
+      renderPersonalDictionaryUi();
+      setMessages([{ type: 'ok', text: `${grid} wurde aus „${personalDictionary.selectedList}“ entfernt.` }]);
+    }
+  });
+}
+
+if (els.personalExportJson) {
+  els.personalExportJson.addEventListener('click', exportPersonalDictionary);
+}
+
+if (els.personalImportJson) {
+  els.personalImportJson.addEventListener('change', async () => {
+    const file = els.personalImportJson.files && els.personalImportJson.files[0];
+    if (!file) return;
+    try {
+      await importPersonalDictionaryJson(file);
+    } catch (error) {
+      console.error(error);
+      setMessages([{ type: 'error', text: 'Der persönliche Wortschatz konnte nicht importiert werden. Bitte prüfe die JSON-Datei.' }]);
+    } finally {
+      els.personalImportJson.value = '';
+    }
+  });
+}
 
 if (els.dictionaryFile) {
   els.dictionaryFile.addEventListener('change', async () => {
@@ -1638,8 +2053,10 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+loadPersonalDictionary();
 loadState();
+renderPersonalDictionaryUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.3.4. Der eingebaute deutsche Vollfundus ist aktiv; die Wortarten-Gewichtung steht standardmäßig auf 60:20:10:10.' }]);
+  setMessages([{ text: 'Bereit für v0.4.0. Der deutsche Vollfundus ist aktiv, und Dein persönlicher Wortschatz kann jetzt mit Listen gepflegt werden.' }]);
 });

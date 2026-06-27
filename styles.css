@@ -605,3 +605,79 @@ button.mini {
   border-radius: 0.45rem;
   margin-left: 0.35rem;
 }
+
+.personal-results {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.personal-word-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.personal-word {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.personal-word.blocked {
+  background: rgba(185, 28, 28, 0.06);
+  border-color: rgba(185, 28, 28, 0.18);
+}
+
+.personal-word.blocked strong {
+  color: var(--danger);
+  text-decoration: line-through;
+}
+
+.personal-word .word-meta {
+  display: block;
+  margin-top: 0.15rem;
+}
+
+.personal-word-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  justify-content: flex-end;
+  min-width: 9rem;
+}
+
+.file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 800;
+  margin: 0;
+}
+
+.file-button input {
+  display: none;
+}
+
+.personal-export-row {
+  margin-top: 0.8rem;
+}
+
+@media (max-width: 860px) {
+  .personal-word {
+    flex-direction: column;
+  }
+
+  .personal-word-actions {
+    justify-content: flex-start;
+  }
+}

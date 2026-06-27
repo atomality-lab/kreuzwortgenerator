@@ -1,7 +1,7 @@
 {
   "name": "Kreuzwortdrucker",
   "short_name": "Kreuzwort",
-  "description": "PWA-Prototyp mit deutschem Vollfundus, Wortformenfilter und gewichteter Wortarten-Auswahl zum Erzeugen, Bearbeiten und Exportieren von Kreuzworträtseln.",
+  "description": "PWA-Prototyp mit deutschem Vollfundus, persönlichem Wortschatz und Listenverwaltung zum Erzeugen, Bearbeiten und Exportieren von Kreuzworträtseln.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#1f2937" />
-  <title>Kreuzwortdrucker v0.3.4</title>
+  <title>Kreuzwortdrucker v0.4.0</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -14,7 +14,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">PWA-Prototyp</p>
-      <h1>Kreuzwortdrucker <span>v0.3.4</span></h1>
+      <h1>Kreuzwortdrucker <span>v0.4.0</span></h1>
     </div>
     <div class="header-actions">
       <button id="installButton" class="ghost hidden" type="button">App installieren</button>
@@ -25,7 +25,7 @@
   <main class="app-layout">
     <section class="panel controls" aria-labelledby="settingsTitle">
       <h2 id="settingsTitle">Rätsel erstellen</h2>
-      <p class="hint">v0.3.4 nutzt einen eingebauten deutschen Vollfundus mit Wortformenfilter und gewichteter Wortarten-Auswahl auf Basis von cspell/dict-de-de 4.1.2, de-DE_frami und igerman98. Zusatzlisten sind optional.</p>
+      <p class="hint">v0.4.0 ergänzt den deutschen Vollfundus um einen persönlichen Wortschatz mit eigenen Listen, Import/Export und Sperrstatus. Der Vollfundus bleibt als Füll- und Ergänzungsquelle aktiv.</p>
 
       <div class="grid two">
         <label>
@@ -103,6 +103,54 @@
           <label>
             Dateiname
             <input id="baseName" type="text" value="raetsel_001" />
+          </label>
+        </div>
+      </details>
+
+      <details class="advanced personal-tools" open>
+        <summary>Persönlicher Wortschatz</summary>
+        <p class="hint">Hier sammelst Du eigene Themenwörter dauerhaft im Browser. Du kannst Listen anlegen, Wörter hinzufügen, Wortlisten importieren, Wörter sperren und eine Liste als Zusatz-/Wunschwörter ins aktuelle Rätsel übernehmen.</p>
+        <div id="personalStatus" class="dictionary-status">Persönlicher Wortschatz wird geladen.</div>
+
+        <div class="grid two">
+          <label>
+            Liste auswählen
+            <select id="personalListSelect"></select>
+          </label>
+          <label>
+            Neue Liste
+            <input id="personalListName" type="text" placeholder="z. B. Philosophie" />
+          </label>
+        </div>
+        <div class="button-row wrap">
+          <button id="personalCreateList" type="button">Liste anlegen</button>
+          <button id="personalUseList" class="primary" type="button">Liste ins Rätsel übernehmen</button>
+        </div>
+
+        <label>
+          Wort hinzufügen
+          <input id="personalWordInput" type="text" placeholder="z. B. Ambivalenz" />
+        </label>
+        <div class="button-row wrap">
+          <button id="personalAddWord" type="button">Wort hinzufügen</button>
+        </div>
+
+        <label>
+          Wortliste in ausgewählte Liste importieren
+          <input id="personalFile" type="file" accept=".txt,.csv,text/plain,text/csv" />
+        </label>
+
+        <label>
+          Persönlichen Wortschatz durchsuchen
+          <input id="personalSearch" type="search" placeholder="z. B. Erz oder Philosophie" />
+        </label>
+        <div id="personalResults" class="personal-results empty-clue-list">Noch keine persönlichen Wörter vorhanden.</div>
+
+        <div class="button-row wrap personal-export-row">
+          <button id="personalExportJson" type="button">Wortschatz JSON exportieren</button>
+          <label class="file-button">
+            Wortschatz JSON importieren
+            <input id="personalImportJson" type="file" accept=".json,application/json" />
           </label>
         </div>
       </details>
@@ -216,8 +264,8 @@ UND"></textarea>
   </main>
 
   <footer class="app-footer">
-    <span>Kreuzwortdrucker v0.3.4</span>
-    <span>Freiform-im-Format-Prototyp mit deutschem Vollfundus, Wortformenfilter, gewichteter Wortarten-Auswahl, Zusatzimport, Ausschlussliste, Fragenverwaltung und Canva-Export</span>
+    <span>Kreuzwortdrucker v0.4.0</span>
+    <span>Freiform-im-Format-Prototyp mit deutschem Vollfundus, persönlichem Wortschatz, Listenverwaltung, Ausschlussliste, Fragenverwaltung und Canva-Export</span>
   </footer>
 
   <script src="builtin-de.js"></script>
