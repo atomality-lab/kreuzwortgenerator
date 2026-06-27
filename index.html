@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1f2937" />
+  <title>Kreuzwortdrucker v0.1.0</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">PWA-Prototyp</p>
+      <h1>Kreuzwortdrucker <span>v0.1.0</span></h1>
+    </div>
+    <div class="header-actions">
+      <button id="installButton" class="ghost hidden" type="button">App installieren</button>
+      <button id="resetButton" class="ghost" type="button">Zurücksetzen</button>
+    </div>
+  </header>
+
+  <main class="app-layout">
+    <section class="panel controls" aria-labelledby="settingsTitle">
+      <h2 id="settingsTitle">Rätsel erstellen</h2>
+      <p class="hint">v0.1 arbeitet mit Deiner eingegebenen Wortliste. Ein Wörterbuch-Import folgt in einer späteren Version.</p>
+
+      <div class="grid two">
+        <label>
+          Breite in Kästchen
+          <input id="gridWidth" type="number" min="5" max="40" value="22" />
+        </label>
+        <label>
+          Höhe in Kästchen
+          <input id="gridHeight" type="number" min="5" max="40" value="15" />
+        </label>
+      </div>
+
+      <div class="grid two">
+        <label>
+          Mindestwortlänge
+          <input id="minLength" type="number" min="2" max="30" value="4" />
+        </label>
+        <label>
+          Max. Wörter
+          <input id="maxWords" type="number" min="1" max="200" value="40" />
+        </label>
+      </div>
+
+      <details class="advanced">
+        <summary>Leitwörter und Ausgabe</summary>
+        <label>
+          Leitwort waagrecht (optional)
+          <input id="seedAcross" type="text" placeholder="z. B. PHILOSOPHIE" />
+        </label>
+        <label>
+          Leitwort senkrecht (optional)
+          <input id="seedDown" type="text" placeholder="z. B. PARADOXON" />
+        </label>
+        <div class="checkbox-row">
+          <input id="cropToContent" type="checkbox" checked />
+          <label for="cropToContent">Export/Ansicht auf belegten Bereich zuschneiden</label>
+        </div>
+        <div class="grid two">
+          <label>
+            Kästchengröße SVG
+            <input id="cellSize" type="number" min="20" max="120" value="42" />
+          </label>
+          <label>
+            Dateiname
+            <input id="baseName" type="text" value="raetsel_001" />
+          </label>
+        </div>
+      </details>
+
+      <label>
+        Wortliste
+        <textarea id="wordInput" spellcheck="false" rows="14">Ambivalenz
+Metapher
+Resonanz
+Katalysator
+Paradox
+Dialektik
+Synthese
+Analyse
+Kognition
+Diskurs
+Symbolik
+Ironie
+Allegorie
+These
+Antithese
+Kontext
+Abstraktion
+Deduktion
+Induktion
+Hermeneutik
+Perspektive
+Erkenntnis
+Argument
+Logik</textarea>
+      </label>
+
+      <div class="button-row">
+        <button id="generateButton" class="primary" type="button">Rätsel erstellen</button>
+        <button id="exampleButton" class="ghost" type="button">Beispiel laden</button>
+      </div>
+
+      <div id="messages" class="messages" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="panel preview" aria-labelledby="previewTitle">
+      <div class="preview-head">
+        <div>
+          <h2 id="previewTitle">Vorschau</h2>
+          <p id="stats" class="hint">Noch kein Rätsel erzeugt.</p>
+        </div>
+        <div class="view-switch" role="group" aria-label="Ansicht wählen">
+          <button id="emptyViewButton" class="active" type="button">Leer</button>
+          <button id="solutionViewButton" type="button">Gelöst</button>
+        </div>
+      </div>
+
+      <div id="gridWrap" class="grid-wrap">
+        <div class="empty-state">Klick auf „Rätsel erstellen“ und die Buchstaben nehmen Aufstellung.</div>
+      </div>
+
+      <div class="export-box">
+        <h3>Export</h3>
+        <div class="button-row wrap">
+          <button id="exportEmptySvg" type="button" disabled>Leeres Gitter SVG</button>
+          <button id="exportSolutionSvg" type="button" disabled>Gelöstes Gitter SVG</button>
+          <button id="exportSolutionsTxt" type="button" disabled>Lösungsliste TXT</button>
+          <button id="exportProjectJson" type="button" disabled>Projekt JSON</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel lists" aria-labelledby="listsTitle">
+      <h2 id="listsTitle">Prüfung & Lösungsliste</h2>
+      <div class="list-columns">
+        <div>
+          <h3>Waagrecht</h3>
+          <ol id="acrossList" class="word-list"></ol>
+        </div>
+        <div>
+          <h3>Senkrecht</h3>
+          <ol id="downList" class="word-list"></ol>
+        </div>
+      </div>
+
+      <details open>
+        <summary>Nicht platziert / Hinweise</summary>
+        <ul id="unplacedList" class="issue-list"></ul>
+      </details>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <span>Kreuzwortdrucker v0.1.0</span>
+    <span>Freiform-im-Format-Prototyp für Buchsatz und Canva-Export</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
