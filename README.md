@@ -1,18 +1,18 @@
-# Kreuzwortdrucker v0.6.0
+# Kreuzwortdrucker v0.6.1
 
 PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit großem deutschem Wortfundus, persönlichem Wortschatz, zweistufiger Fülllogik, Fragenverwaltung und SVG-/TXT-/CSV-Export.
 
-## Neu in v0.6.0
+## Neu in v0.6.1
 
-- Wörter werden **nicht mehr automatisch** in den gesicherten Wortschatz übernommen, nur weil sie im Rätsel verwendet wurden.
-- In der rechten Lösungsliste gibt es pro verwendetem Wort einen Button **„sichern“**.
-- Erst nach Klick auf **„sichern“** wird ein Wort bewusst in den gesicherten Wortschatz übernommen.
-- Bereits gesicherte Wörter werden in der Lösungsliste als **„gesichert“** markiert.
-- Wenn ein Wort über **„nicht verwenden“** ausgeschlossen wird, wird es zusätzlich aus dem gesicherten Wortschatz entfernt.
-- Dadurch können ausgeschlossene Wörter wie `AKKON` nicht mehr als bevorzugt gesicherte Füllwörter zurückkehren.
-- Die bestehende Zwei-Schritt-Logik bleibt erhalten:
-  - **Rätsel aus Liste erstellen** nutzt nur die Themenwörter aus der persönlichen Liste.
-  - **Rätsel erstellen / Lücken füllen** ergänzt danach mit gesichertem Wortschatz und Basiswortschatz.
+- Datenbank-Füllwortschatz standardmäßig deutlich strenger gefiltert.
+- Standardmodus: **Substantive und Substantiv-Mehrzahl ja, konjugierte Datenbank-Verben nein**.
+- Kleingeschriebene Datenbankwörter werden im Standardmodus nicht mehr als normale Füllkandidaten verwendet. Dadurch sollen Formen wie `UMFLOG`, `ANHEIMGAB`, `ABBAUTEST` oder ähnliche Vergangenheits-/Konjugationsformen nicht mehr nachrutschen.
+- Persönliche Wörter und bewusst gesicherte Wörter bleiben unverändert erlaubt. Wenn ein Verb oder ein Fremdwort bewusst gewünscht ist, kann es über den persönlichen oder gesicherten Wortschatz genutzt werden.
+- Neue Datenbank-Formenoption **Vorsichtig: Substantive, ungebeugte Adjektive und Infinitive**, falls bewusst auch Datenbank-Adjektive oder Infinitive zugelassen werden sollen.
+- Standard-Füllgewichtung von 60:20:10:10 auf **90:0:0:10** geändert.
+- Mehrdeutige Gitterformen bevorzugen jetzt Umlaut- und Substantiv-Schreibweisen, wenn mehrere Originalformen zur selben Gitterform führen.
+- Die bewusste Sicherungslogik aus v0.6.0 bleibt erhalten: Wörter landen erst nach Klick auf **„sichern“** im gesicherten Wortschatz.
+- Wird ein Wort über **„nicht verwenden“** ausgeschlossen, wird es zusätzlich aus dem gesicherten Wortschatz entfernt.
 
 ## Bereits enthalten
 
@@ -21,7 +21,7 @@ PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit gr
 - Zusatzlisten-Import für fremdsprachige Wörter, Fachbegriffe oder Eigennamen
 - automatische Umschrift Ä/Ö/Ü/ß zu AE/OE/UE/SS
 - Unicode-Normalisierung für zerlegte Umlaute
-- Datenbank-Formenfilter: Grundformen + Substantiv-Mehrzahl, streng oder alle Wörterbuchformen
+- Datenbank-Formenfilter: rätselgeeignete Substantive/Pluralformen, sehr streng, vorsichtig gemischt oder alle Wörterbuchformen
 - Wortarten-Gewichtung
 - persönliche Wörter und gesperrte Wörter
 - persönliche Listen mit Mehrfachzuordnung
@@ -79,4 +79,4 @@ Vor dem Löschen von Website-Daten bitte den persönlichen Wortschatz als JSON e
 
 ## Hinweis zur nächsten Generatorstufe
 
-v0.6.0 bereinigt die Sicherungslogik und macht den Füllwortschatz kontrollierter. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.
+v0.6.1 macht den Datenbank-Füllwortschatz deutlich rätseltauglicher. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.

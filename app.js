@@ -1,8 +1,8 @@
 'use strict';
 
-const VERSION = '0.6.0';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.6.0.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.5.3.lastState', 'kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.6.1';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.6.1.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.6.0.lastState', 'kreuzwortdrucker.v0.5.3.lastState', 'kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
@@ -446,7 +446,7 @@ function savePuzzleWordToSafe(rawWord) {
 }
 
 function addPlacedWordsToSafeVocabulary(puzzle) {
-  // Seit v0.6.0 werden Wörter nicht mehr automatisch gesichert.
+  // Seit v0.6.1 werden Wörter nicht mehr automatisch gesichert.
   // Diese Funktion bleibt nur als Kompatibilitätshülle für ältere Aufrufe erhalten.
   return puzzle;
 }
@@ -678,6 +678,17 @@ function extractDictionaryWord(line, index) {
   return value.trim();
 }
 
+function scoreDictionaryPreferredOriginal(clean) {
+  const original = String(clean.original || clean.grid || '');
+  let score = 0;
+  if (hasGermanUmlaut(original)) score += 60;
+  if (/^[A-ZÄÖÜẞ]/.test(original)) score += 45;
+  if (/^[a-zäöüß]/.test(original)) score -= 10;
+  if (/^[a-zäöüß].*(te|test|tet|ten|tetest|tetet|st|t)$/.test(original)) score -= 40;
+  if (/[^A-Za-zÄÖÜäöüßẞ]/.test(original)) score -= 20;
+  return score;
+}
+
 function analyzeDictionaryText(text, sourceName, minImportLength = 3) {
   const lines = String(text || '').split(/\r?\n/);
   const groups = new Map();
@@ -735,7 +746,9 @@ function analyzeDictionaryText(text, sourceName, minImportLength = 3) {
       stats.duplicateLines += 1;
     } else {
       group.originals.add(clean.original);
-      if (hasGermanUmlaut(clean.original) && !hasGermanUmlaut(group.preferred.original)) {
+      const currentScore = scoreDictionaryPreferredOriginal(group.preferred);
+      const candidateScore = scoreDictionaryPreferredOriginal(clean);
+      if (candidateScore > currentScore) {
         group.preferred = { original: clean.original, grid: clean.grid, length: clean.grid.length, source: 'dictionary' };
       }
     }
@@ -899,8 +912,9 @@ function getBlockedGridSet(text = '') {
 
 function getWordFormModeLabel(mode) {
   if (mode === 'all') return 'alle Wörterbuchformen';
-  if (mode === 'strict') return 'streng: möglichst nur Singular/Grundform';
-  return 'Grundformen + Substantiv-Mehrzahl';
+  if (mode === 'mixed') return 'vorsichtig: Substantive, ungebeugte Adjektive und Infinitive';
+  if (mode === 'strict') return 'sehr streng: möglichst nur Substantiv-Singular/Grundform';
+  return 'rätselgeeignet: Substantive + Mehrzahl, keine Datenbank-Verben';
 }
 
 function getWordTypeWeights(settings = getSettings()) {
@@ -909,7 +923,7 @@ function getWordTypeWeights(settings = getSettings()) {
   const verb = clampNumber(settings.verbWeight ?? 10, 0, 100, 10);
   const other = clampNumber(settings.otherWeight ?? 10, 0, 100, 10);
   const total = noun + adjective + verb + other;
-  if (!total) return { noun: 60, adjective: 20, verb: 10, other: 10 };
+  if (!total) return { noun: 90, adjective: 0, verb: 0, other: 10 };
   return { noun, adjective, verb, other };
 }
 
@@ -1096,26 +1110,39 @@ function isAllowedDatabaseBaseForm(entry, mode = 'basic') {
   if (!entry || mode === 'all') return true;
   const original = String(entry.original || entry.grid || '');
   const grid = entry.grid || normalizeWord(original).grid;
-  if (!grid || grid.length <= 2) return true;
+  if (!grid) return false;
+  if (grid.length <= 2) return true;
 
   const originalLower = original.toLocaleLowerCase('de-DE');
   const startsUpper = /^[A-ZÄÖÜẞ]/.test(original);
   const startsLower = /^[a-zäöüß]/.test(original);
 
-  if (startsUpper) {
-    if (mode === 'strict') return !likelyInflectedNoun(grid) && !likelyGenitiveNoun(grid);
-    return !likelyGenitiveNoun(grid);
+  // Standard für Kreuzworträtsel: Der Datenbank-Füllfundus liefert vor allem Substantive.
+  // Klein geschriebene Wörter enthalten im Rechtschreibwörterbuch sehr viele konjugierte
+  // Verbformen und gebeugte Adjektive. Diese bleiben im Standardmodus draußen. Persönliche
+  // und bewusst gesicherte Wörter sind davon nicht betroffen.
+  if (mode === 'basic') {
+    if (startsUpper) return !likelyGenitiveNoun(grid);
+    return false;
   }
 
-  if (startsLower) {
-    const type = classifyWordType(entry);
-    if (type === 'verb') return likelyBaseVerb(grid, originalLower);
-    if (type === 'adjective') return likelyBaseAdjective(grid, originalLower);
-    if (likelyInflectedVerb(grid, originalLower) || likelyInflectedAdjective(grid)) return false;
-    return true;
+  if (mode === 'strict') {
+    if (startsUpper) return !likelyInflectedNoun(grid) && !likelyGenitiveNoun(grid);
+    return false;
   }
 
-  return true;
+  if (mode === 'mixed') {
+    if (startsUpper) return !likelyGenitiveNoun(grid);
+    if (startsLower) {
+      const type = classifyWordType(entry);
+      if (type === 'verb') return likelyBaseVerb(grid, originalLower);
+      if (type === 'adjective') return likelyBaseAdjective(grid, originalLower);
+      if (likelyInflectedVerb(grid, originalLower) || likelyInflectedAdjective(grid)) return false;
+      return false;
+    }
+  }
+
+  return false;
 }
 
 function isLikelyInflectedEntry(entry, mode = 'basic') {
@@ -1164,7 +1191,7 @@ function updateDictionaryUi() {
     : '<br><span class="word-meta">Keine Zusatzliste importiert. Du kannst fremdsprachige oder eigene Wörter zusätzlich laden.</span>';
   const ambiguous = stats.ambiguousGridForms ? ` · ${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen erkannt` : '';
   const umlautless = stats.umlautlessVariantsSkipped ? ` · ${formatNumber(stats.umlautlessVariantsSkipped)} umlautlose Parallelformen entfernt` : '';
-  const filterInfo = `<br><span class="word-meta">Datenbank-Formen: ${escapeHtml(getWordFormModeLabel(settings.wordFormMode))} · Wortarten-Gewichtung ${escapeHtml(formatWordTypeWeights(settings))} · ${formatNumber(filteredCount)} Wörter als gefilterter Füllfundus nutzbar</span>`;
+  const filterInfo = `<br><span class="word-meta">Datenbank-Formen: ${escapeHtml(getWordFormModeLabel(settings.wordFormMode))} · Füllgewichtung ${escapeHtml(formatWordTypeWeights(settings))} · ${formatNumber(filteredCount)} Wörter als gefilterter Füllfundus nutzbar</span>`;
   els.dictionaryStatus.innerHTML = `
     <strong>${escapeHtml(dictionaryState.sourceName)}</strong><br>
     ${formatNumber(stats.usable)} nutzbare Wörter verfügbar · davon ${formatNumber(dictionaryState.builtInCount)} eingebaut · ${formatNumber(stats.tooShort)} sehr kurze Wörter ausgeschlossen${escapeHtml(ambiguous)}${escapeHtml(umlautless)}
@@ -1929,9 +1956,9 @@ function getSettings() {
     maxWords: clampNumber(els.maxWords.value, 0, 200, 40),
     maxFillerWords: clampNumber(els.maxWords.value, 0, 200, 40),
     wordFormMode: els.wordFormMode ? els.wordFormMode.value : 'basic',
-    nounWeight: els.nounWeight ? els.nounWeight.value : 60,
-    adjectiveWeight: els.adjectiveWeight ? els.adjectiveWeight.value : 20,
-    verbWeight: els.verbWeight ? els.verbWeight.value : 10,
+    nounWeight: els.nounWeight ? els.nounWeight.value : 90,
+    adjectiveWeight: els.adjectiveWeight ? els.adjectiveWeight.value : 0,
+    verbWeight: els.verbWeight ? els.verbWeight.value : 0,
     otherWeight: els.otherWeight ? els.otherWeight.value : 10,
     seedAcross: els.seedAcross.value,
     seedDown: els.seedDown.value,
@@ -2082,9 +2109,9 @@ function saveState() {
       minLength: els.minLength.value,
       maxWords: els.maxWords.value,
       wordFormMode: els.wordFormMode ? els.wordFormMode.value : 'basic',
-      nounWeight: els.nounWeight ? els.nounWeight.value : '60',
-      adjectiveWeight: els.adjectiveWeight ? els.adjectiveWeight.value : '20',
-      verbWeight: els.verbWeight ? els.verbWeight.value : '10',
+      nounWeight: els.nounWeight ? els.nounWeight.value : '90',
+      adjectiveWeight: els.adjectiveWeight ? els.adjectiveWeight.value : '0',
+      verbWeight: els.verbWeight ? els.verbWeight.value : '0',
       otherWeight: els.otherWeight ? els.otherWeight.value : '10',
       seedAcross: els.seedAcross.value,
       seedDown: els.seedDown.value,
@@ -2119,6 +2146,17 @@ function loadState() {
       if (els[key].type === 'checkbox') els[key].checked = Boolean(value);
       else els[key].value = value;
     });
+    if (els.wordFormMode && !Array.from(els.wordFormMode.options).some((option) => option.value === els.wordFormMode.value)) {
+      els.wordFormMode.value = 'basic';
+    }
+    // Alte 60:20:10:10-Standardgewichtung aus v0.6.0 wird auf den neuen
+    // kreuzworträtselgeeigneten Standard umgestellt. Bewusst veränderte Werte bleiben erhalten.
+    if (data.fields.wordFormMode === 'basic' && String(data.fields.nounWeight) === '60' && String(data.fields.adjectiveWeight) === '20' && String(data.fields.verbWeight) === '10' && String(data.fields.otherWeight) === '10') {
+      if (els.nounWeight) els.nounWeight.value = '90';
+      if (els.adjectiveWeight) els.adjectiveWeight.value = '0';
+      if (els.verbWeight) els.verbWeight.value = '0';
+      if (els.otherWeight) els.otherWeight.value = '10';
+    }
   } catch (error) {
     console.warn('Status konnte nicht geladen werden:', error);
   }
@@ -2132,9 +2170,9 @@ function resetState() {
   els.minLength.value = '3';
   els.maxWords.value = '40';
   if (els.wordFormMode) els.wordFormMode.value = 'basic';
-  if (els.nounWeight) els.nounWeight.value = '60';
-  if (els.adjectiveWeight) els.adjectiveWeight.value = '20';
-  if (els.verbWeight) els.verbWeight.value = '10';
+  if (els.nounWeight) els.nounWeight.value = '90';
+  if (els.adjectiveWeight) els.adjectiveWeight.value = '0';
+  if (els.verbWeight) els.verbWeight.value = '0';
   if (els.otherWeight) els.otherWeight.value = '10';
   els.seedAcross.value = '';
   els.seedDown.value = '';
@@ -2501,5 +2539,5 @@ renderPersonalDictionaryUi();
 renderSafeVocabularyUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.6.0. Persönliche Listen bilden die Themenbasis; der deutsche Vollfundus liefert gefilterte Grundformen als Füllmaterial.' }]);
+  setMessages([{ text: 'Bereit für v0.6.1. Der Datenbank-Füllfundus ist jetzt standardmäßig streng rätselgeeignet: Substantive und Pluralformen ja, konjugierte Verben nein.' }]);
 });
