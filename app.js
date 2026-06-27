@@ -1,7 +1,7 @@
 'use strict';
 
-const VERSION = '0.5.1';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.5.1.lastState';
+const VERSION = '0.5.2';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.5.2.lastState';
 const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
@@ -18,6 +18,8 @@ const els = {
   otherWeight: document.querySelector('#otherWeight'),
   seedAcross: document.querySelector('#seedAcross'),
   seedDown: document.querySelector('#seedDown'),
+  saveSeedsToPersonal: document.querySelector('#saveSeedsToPersonal'),
+  personalWordOptions: document.querySelector('#personalWordOptions'),
   cropToContent: document.querySelector('#cropToContent'),
   gridDisplayMode: document.querySelector('#gridDisplayMode'),
   cellSize: document.querySelector('#cellSize'),
@@ -30,6 +32,11 @@ const els = {
   dictionaryStatus: document.querySelector('#dictionaryStatus'),
   dictionarySearch: document.querySelector('#dictionarySearch'),
   dictionaryResults: document.querySelector('#dictionaryResults'),
+  safeVocabularyStatus: document.querySelector('#safeVocabularyStatus'),
+  safeWordInput: document.querySelector('#safeWordInput'),
+  safeAddWord: document.querySelector('#safeAddWord'),
+  safeSearch: document.querySelector('#safeSearch'),
+  safeVocabularyResults: document.querySelector('#safeVocabularyResults'),
   personalStatus: document.querySelector('#personalStatus'),
   personalListSelect: document.querySelector('#personalListSelect'),
   personalListName: document.querySelector('#personalListName'),
@@ -86,6 +93,8 @@ const PERSONAL_STORAGE_KEY = 'kreuzwortdrucker.personalDictionary';
 const LEGACY_PERSONAL_STORAGE_KEYS = ['kreuzwortdrucker.v0.4.1.personalDictionary', 'kreuzwortdrucker.v0.4.0.personalDictionary'];
 const DEFAULT_PERSONAL_LIST = 'Allgemein';
 let personalDictionary = createEmptyPersonalDictionary();
+const SAFE_STORAGE_KEY = 'kreuzwortdrucker.safeVocabulary';
+let safeVocabulary = createEmptySafeVocabulary();
 
 function normalizeWord(raw) {
   const original = String(raw || '').trim();
@@ -350,6 +359,155 @@ function parsePersonalWordList(text) {
 }
 
 
+function createEmptySafeVocabulary() {
+  return {
+    version: VERSION,
+    words: {},
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeSafeVocabulary(data) {
+  const next = createEmptySafeVocabulary();
+  if (!data || typeof data !== 'object') return next;
+  const sourceWords = data.words && typeof data.words === 'object' ? data.words : {};
+  Object.values(sourceWords).forEach((word) => {
+    const clean = normalizeWord(word.original || word.grid || '');
+    if (!clean.grid) return;
+    next.words[clean.grid] = {
+      original: word.original || clean.original || clean.grid,
+      grid: clean.grid,
+      source: word.source || 'gesichert',
+      useCount: Number(word.useCount || 0),
+      createdAt: word.createdAt || new Date().toISOString(),
+      updatedAt: word.updatedAt || new Date().toISOString(),
+    };
+  });
+  next.updatedAt = data.updatedAt || new Date().toISOString();
+  return next;
+}
+
+function saveSafeVocabulary() {
+  safeVocabulary.updatedAt = new Date().toISOString();
+  localStorage.setItem(SAFE_STORAGE_KEY, JSON.stringify(safeVocabulary));
+}
+
+function loadSafeVocabulary() {
+  try {
+    safeVocabulary = normalizeSafeVocabulary(JSON.parse(localStorage.getItem(SAFE_STORAGE_KEY) || 'null'));
+  } catch (error) {
+    console.warn('Gesicherter Wortschatz konnte nicht geladen werden:', error);
+    safeVocabulary = createEmptySafeVocabulary();
+  }
+}
+
+function upsertSafeWord(rawWord, source = 'manuell', increment = 0) {
+  const clean = normalizeWord(rawWord);
+  if (!clean.original || !clean.grid) return { ok: false, reason: 'Keine gültigen Buchstaben gefunden.' };
+  const now = new Date().toISOString();
+  const existing = safeVocabulary.words[clean.grid];
+  if (existing) {
+    existing.original = existing.original || clean.original;
+    existing.source = existing.source === 'manuell' ? existing.source : source || existing.source;
+    existing.useCount = Number(existing.useCount || 0) + Number(increment || 0);
+    existing.updatedAt = now;
+  } else {
+    safeVocabulary.words[clean.grid] = {
+      original: clean.original,
+      grid: clean.grid,
+      source,
+      useCount: Number(increment || 0),
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+  return { ok: true, word: safeVocabulary.words[clean.grid] };
+}
+
+function addPlacedWordsToSafeVocabulary(puzzle) {
+  if (!puzzle || !Array.isArray(puzzle.placed)) return;
+  puzzle.placed.forEach((word) => {
+    if (!word || !word.grid) return;
+    const source = word.source === 'dictionary' ? 'Datenbank verwendet' : word.source === 'safe' ? 'gesichert verwendet' : 'persönlich verwendet';
+    upsertSafeWord(word.original || word.grid, source, 1);
+  });
+  saveSafeVocabulary();
+  renderSafeVocabularyUi();
+}
+
+function getSafeVocabularyEntries(settings = getSettings(), extraExcluded = new Set()) {
+  const maxLength = Math.max(settings.width, settings.height);
+  const blocked = getBlockedGridSet(settings.blockedWordsText || '');
+  return Object.values(safeVocabulary.words || {})
+    .map((word) => ({ original: word.original, grid: word.grid, length: word.grid.length, source: 'safe', useCount: word.useCount || 0 }))
+    .filter((entry) => entry.length >= settings.minLength
+      && entry.length <= maxLength
+      && !blocked.has(entry.grid)
+      && !extraExcluded.has(entry.grid));
+}
+
+function renderSafeVocabularyUi() {
+  if (!els.safeVocabularyStatus) return;
+  const words = Object.values(safeVocabulary.words || {}).sort((a, b) => (b.useCount || 0) - (a.useCount || 0) || a.original.localeCompare(b.original, 'de'));
+  els.safeVocabularyStatus.innerHTML = `${formatNumber(words.length)} gesicherte Wörter · davon ${formatNumber(words.filter((word) => (word.useCount || 0) > 0).length)} bereits verwendet`;
+  renderSafeVocabularyResults();
+}
+
+function renderSafeVocabularyResults() {
+  if (!els.safeVocabularyResults) return;
+  const queryRaw = els.safeSearch ? els.safeSearch.value.trim() : '';
+  const query = normalizeWord(queryRaw).grid;
+  let words = Object.values(safeVocabulary.words || {});
+  if (query) {
+    const rawUpper = queryRaw.toUpperCase();
+    words = words.filter((word) => word.grid.includes(query) || word.original.toUpperCase().includes(rawUpper));
+  }
+  words.sort((a, b) => (b.useCount || 0) - (a.useCount || 0) || a.original.localeCompare(b.original, 'de'));
+  const visible = words.slice(0, 80);
+  if (!visible.length) {
+    els.safeVocabularyResults.classList.add('empty-clue-list');
+    els.safeVocabularyResults.textContent = query ? 'Keine gesicherten Wörter gefunden.' : 'Noch keine gesicherten Wörter vorhanden.';
+    return;
+  }
+  els.safeVocabularyResults.classList.remove('empty-clue-list');
+  els.safeVocabularyResults.innerHTML = `
+    <div class="dictionary-result-summary">${formatNumber(words.length)} ${query ? 'Treffer' : 'gesicherte Wörter'}</div>
+    <div class="personal-word-list">
+      ${visible.map((word) => `
+        <div class="personal-word" data-safe-word-grid="${escapeHtml(word.grid)}">
+          <div>
+            <strong>${escapeHtml(word.original)}</strong>
+            <span class="word-meta">${escapeHtml(word.grid)} · ${word.grid.length} · ${escapeHtml(word.source || 'gesichert')} · ${formatNumber(word.useCount || 0)}× verwendet</span>
+          </div>
+        </div>`).join('')}
+    </div>
+    ${words.length > visible.length ? `<div class="word-meta">Weitere ${formatNumber(words.length - visible.length)} Wörter ausgeblendet.</div>` : ''}`;
+}
+
+function renderPersonalWordOptions() {
+  if (!els.personalWordOptions) return;
+  const words = getPersonalWordsForList(personalDictionary.selectedList).filter((word) => !word.blocked);
+  els.personalWordOptions.innerHTML = words.map((word) => `<option value="${escapeHtml(word.original)}">${escapeHtml(word.grid)}</option>`).join('');
+}
+
+function saveSeedWordsToCurrentList() {
+  const listName = personalDictionary.selectedList || DEFAULT_PERSONAL_LIST;
+  const values = [els.seedAcross && els.seedAcross.value, els.seedDown && els.seedDown.value].filter((value) => String(value || '').trim());
+  if (!values.length) {
+    setMessages([{ type: 'error', text: 'Bitte zuerst mindestens ein Leitwort eintragen.' }]);
+    return;
+  }
+  let added = 0;
+  values.forEach((value) => {
+    const result = upsertPersonalWord(value, listName);
+    if (result.ok) added += 1;
+  });
+  savePersonalDictionary();
+  renderPersonalDictionaryUi();
+  setMessages([{ type: 'ok', text: `${formatNumber(added)} Leitwort/Leitwörter wurden in „${listName}“ gespeichert.` }]);
+}
+
+
 function getSelectedPersonalTargetLists() {
   if (!els.personalWordListPicker) return [personalDictionary.selectedList || DEFAULT_PERSONAL_LIST];
   const selected = Array.from(els.personalWordListPicker.selectedOptions || []).map((option) => option.value);
@@ -379,7 +537,9 @@ function renderPersonalDictionaryUi() {
     <strong>${escapeHtml(personalDictionary.selectedList)}</strong><br>
     ${formatNumber(stats.wordCount)} persönliche Wörter in ${formatNumber(stats.listCount)} Listen · ${formatNumber(stats.blockedCount)} gesperrt · ${formatNumber(allowedInList)} in der aktuellen Liste verwendbar`;
   renderPersonalResults();
+  renderPersonalWordOptions();
 }
+
 
 function renderPersonalResults() {
   if (!els.personalResults) return;
@@ -445,24 +605,34 @@ function useSelectedPersonalList() {
 
 function createPuzzleFromSelectedPersonalList() {
   if (!useSelectedPersonalList()) return;
-  createPuzzle();
+  createPuzzle(false);
 }
 
 function exportPersonalDictionary() {
-  const payload = JSON.stringify(personalDictionary, null, 2);
-  downloadText('kreuzwortdrucker_persoenlicher_wortschatz.json', payload, 'application/json;charset=utf-8');
+  const payload = JSON.stringify({
+    exportVersion: VERSION,
+    exportedAt: new Date().toISOString(),
+    personalDictionary,
+    safeVocabulary,
+  }, null, 2);
+  downloadText('kreuzwortdrucker_wortschatz_sicherung.json', payload, 'application/json;charset=utf-8');
 }
 
 async function importPersonalDictionaryJson(file) {
   if (!file) return;
   const text = await file.text();
-  const imported = normalizePersonalDictionary(JSON.parse(text));
+  const parsed = JSON.parse(text);
+  const imported = normalizePersonalDictionary(parsed.personalDictionary || parsed);
+  const importedSafe = parsed.safeVocabulary ? normalizeSafeVocabulary(parsed.safeVocabulary) : safeVocabulary;
   const before = getPersonalStats();
   personalDictionary = imported;
+  safeVocabulary = importedSafe;
   savePersonalDictionary();
+  saveSafeVocabulary();
   renderPersonalDictionaryUi();
+  renderSafeVocabularyUi();
   const after = getPersonalStats();
-  setMessages([{ type: 'ok', text: `Persönlicher Wortschatz importiert: ${formatNumber(after.wordCount)} Wörter in ${formatNumber(after.listCount)} Listen.` }, ...(before.wordCount ? [{ text: 'Der bisherige persönliche Wortschatz wurde durch den Import ersetzt. Vorherige Exporte kannst Du bei Bedarf wieder einspielen.' }] : [])]);
+  setMessages([{ type: 'ok', text: `Wortschatz-Sicherung importiert: ${formatNumber(after.wordCount)} persönliche Wörter in ${formatNumber(after.listCount)} Listen und ${formatNumber(Object.keys(safeVocabulary.words || {}).length)} gesicherte Wörter.` }, ...(before.wordCount ? [{ text: 'Der bisherige persönliche Wortschatz wurde durch den Import ersetzt. Vorherige Exporte kannst Du bei Bedarf wieder einspielen.' }] : [])]);
 }
 
 async function importPersonalWordFile(file) {
@@ -936,7 +1106,7 @@ function appendBlockedWord(rawWord) {
 function updateDictionaryUi() {
   if (!els.dictionaryStatus) return;
   const enabled = hasDictionary();
-  els.fillFromDictionary.disabled = !enabled;
+  if (els.fillFromDictionary) els.fillFromDictionary.disabled = !enabled;
   els.clearDictionary.disabled = !hasImportedDictionary();
   els.dictionarySearch.disabled = !enabled;
   if (!enabled) {
@@ -953,7 +1123,7 @@ function updateDictionaryUi() {
     : '<br><span class="word-meta">Keine Zusatzliste importiert. Du kannst fremdsprachige oder eigene Wörter zusätzlich laden.</span>';
   const ambiguous = stats.ambiguousGridForms ? ` · ${formatNumber(stats.ambiguousGridForms)} mehrdeutige Gitterformen erkannt` : '';
   const umlautless = stats.umlautlessVariantsSkipped ? ` · ${formatNumber(stats.umlautlessVariantsSkipped)} umlautlose Parallelformen entfernt` : '';
-  const filterInfo = `<br><span class="word-meta">Aktiver Wortformenfilter: ${escapeHtml(getWordFormModeLabel(settings.wordFormMode))} · Wortarten-Gewichtung ${escapeHtml(formatWordTypeWeights(settings))} · ${formatNumber(filteredCount)} Wörter nach aktueller Länge/Form nutzbar</span>`;
+  const filterInfo = `<br><span class="word-meta">Aktiver Wortformenfilter: ${escapeHtml(getWordFormModeLabel(settings.wordFormMode))} · Wortarten-Gewichtung ${escapeHtml(formatWordTypeWeights(settings))} · ${formatNumber(filteredCount)} Wörter als Hintergrund-Füllfundus nutzbar</span>`;
   els.dictionaryStatus.innerHTML = `
     <strong>${escapeHtml(dictionaryState.sourceName)}</strong><br>
     ${formatNumber(stats.usable)} nutzbare Wörter verfügbar · davon ${formatNumber(dictionaryState.builtInCount)} eingebaut · ${formatNumber(stats.tooShort)} sehr kurze Wörter ausgeschlossen${escapeHtml(ambiguous)}${escapeHtml(umlautless)}
@@ -1171,15 +1341,27 @@ function buildGenerationWords(options) {
     }
   });
 
-  if (hasDictionary()) {
-    const targetPool = Math.max(options.maxWords * 10, 300);
-    const picked = pickDictionaryWords(options, seen, targetPool);
-    picked.forEach((entry) => {
+  if (options.useDictionary && options.maxFillerWords > 0) {
+    const safeEntries = getSafeVocabularyEntries(options, seen);
+    safeEntries.forEach((entry) => {
       if (!seen.has(entry.grid)) {
         seen.add(entry.grid);
-        words.push({ original: entry.original, grid: entry.grid, source: 'dictionary' });
+        words.push({ original: entry.original, grid: entry.grid, source: 'safe' });
       }
     });
+
+    if (hasDictionary()) {
+      const targetPool = Math.max(options.maxFillerWords * 10, 300);
+      const picked = pickDictionaryWords({ ...options, maxWords: Math.max(options.maxFillerWords, 1) }, seen, targetPool);
+      picked.forEach((entry) => {
+        if (!seen.has(entry.grid)) {
+          seen.add(entry.grid);
+          words.push({ original: entry.original, grid: entry.grid, source: 'dictionary' });
+        }
+      });
+    }
+  } else if (!words.length && !options.useDictionary) {
+    issues.push('Keine Themen-/Leitwörter eingetragen.');
   } else if (!words.length) {
     issues.push('Kein Wörterbuch verfügbar und keine Themen-/Leitwörter eingetragen.');
   }
@@ -1458,8 +1640,11 @@ function generatePuzzle(options) {
     }
   }
 
+  let placedFillerCount = placed.filter((word) => word.source === 'dictionary' || word.source === 'safe').length;
+
   for (const word of words) {
-    if (placed.length >= options.maxWords) break;
+    const isFiller = word.source === 'dictionary' || word.source === 'safe';
+    if (isFiller && placedFillerCount >= options.maxFillerWords) continue;
     if (placedGrids.has(word.grid)) continue;
     if (word.grid.length > Math.max(options.width, options.height)) {
       unplaced.push({ ...word, reason: 'länger als Breite und Höhe des Formats' });
@@ -1473,6 +1658,7 @@ function generatePuzzle(options) {
     const best = candidates[0];
     placed.push(placeWord(grid, word, best.row, best.col, best.direction));
     placedGrids.add(word.grid);
+    if (isFiller) placedFillerCount += 1;
   }
 
   const numbered = numberGrid(grid);
@@ -1682,7 +1868,8 @@ function getSettings() {
     width: clampNumber(els.gridWidth.value, 5, 40, 22),
     height: clampNumber(els.gridHeight.value, 5, 40, 15),
     minLength: clampNumber(els.minLength.value, 2, 30, 3),
-    maxWords: clampNumber(els.maxWords.value, 1, 200, 40),
+    maxWords: clampNumber(els.maxWords.value, 0, 200, 40),
+    maxFillerWords: clampNumber(els.maxWords.value, 0, 200, 40),
     wordFormMode: els.wordFormMode ? els.wordFormMode.value : 'basic',
     nounWeight: els.nounWeight ? els.nounWeight.value : 60,
     adjectiveWeight: els.adjectiveWeight ? els.adjectiveWeight.value : 20,
@@ -1715,10 +1902,10 @@ function updateButtons(enabled) {
   });
 }
 
-function createPuzzle() {
-  const settings = getSettings();
-  if (!hasDictionary() && !settings.wordText.trim() && !settings.seedAcross.trim() && !settings.seedDown.trim()) {
-    setMessages([{ type: 'error', text: 'Bitte lade ein Wörterbuch, gib Themenwörter ein oder trage ein Leitwort ein.' }]);
+function createPuzzle(useDictionary = true) {
+  const settings = { ...getSettings(), useDictionary };
+  if (!settings.wordText.trim() && !settings.seedAcross.trim() && !settings.seedDown.trim() && (!useDictionary || !hasDictionary())) {
+    setMessages([{ type: 'error', text: useDictionary ? 'Bitte gib Themenwörter ein, trage ein Leitwort ein oder nutze den Basiswortschatz zum Füllen.' : 'Bitte wähle eine persönliche Liste oder trage Themen-/Leitwörter ein.' }]);
     return;
   }
 
@@ -1728,10 +1915,11 @@ function createPuzzle() {
   const used = getUsedCells(currentPuzzle.grid).length;
   const placedCount = currentPuzzle.placed.length;
   const themeUnplacedCount = getThemeUnplacedWords(currentPuzzle).length;
-  const dictionaryUnplacedCount = currentPuzzle.unplaced.filter((word) => word.source === 'dictionary').length;
+  const dictionaryUnplacedCount = currentPuzzle.unplaced.filter((word) => word.source === 'dictionary' || word.source === 'safe').length;
   els.stats.textContent = `${placedCount} Wörter platziert, ${themeUnplacedCount} Themenwörter nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
+  addPlacedWordsToSafeVocabulary(currentPuzzle);
   setMessages([
-    { type: placedCount ? 'ok' : 'error', text: placedCount ? `Rätsel erzeugt: ${placedCount} Wörter wurden platziert.` : 'Es konnte kein Startwort platziert werden.' },
+    { type: placedCount ? 'ok' : 'error', text: placedCount ? (useDictionary ? `Rätsel erzeugt und gefüllt: ${placedCount} Wörter wurden platziert.` : `Rätsel aus Themenliste erzeugt: ${placedCount} Wörter wurden platziert.`) : 'Es konnte kein Startwort platziert werden.' },
     ...(themeUnplacedCount ? [{ text: `${themeUnplacedCount} Themenwörter konnten nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
     ...(!themeUnplacedCount && dictionaryUnplacedCount ? [{ text: `Nicht passende Datenbank-Füllkandidaten wurden ausgeblendet. Wichtig sind unten nur Deine Themenwörter.` }] : []),
   ]);
@@ -1918,6 +2106,10 @@ function resetState() {
 
 
 
+if (els.saveSeedsToPersonal) {
+  els.saveSeedsToPersonal.addEventListener('click', saveSeedWordsToCurrentList);
+}
+
 if (els.personalListSelect) {
   els.personalListSelect.addEventListener('change', () => {
     personalDictionary.selectedList = sanitizeListName(els.personalListSelect.value);
@@ -2045,6 +2237,30 @@ if (els.personalImportJson) {
   });
 }
 
+if (els.safeAddWord) {
+  els.safeAddWord.addEventListener('click', () => {
+    const result = upsertSafeWord(els.safeWordInput.value, 'manuell', 0);
+    if (!result.ok) {
+      setMessages([{ type: 'error', text: result.reason }]);
+      return;
+    }
+    els.safeWordInput.value = '';
+    saveSafeVocabulary();
+    renderSafeVocabularyUi();
+    setMessages([{ type: 'ok', text: `${result.word.original} wurde in den gesicherten Wortschatz aufgenommen.` }]);
+  });
+  els.safeWordInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      els.safeAddWord.click();
+    }
+  });
+}
+
+if (els.safeSearch) {
+  els.safeSearch.addEventListener('input', renderSafeVocabularyResults);
+}
+
 if (els.dictionaryFile) {
   els.dictionaryFile.addEventListener('change', async () => {
     const file = els.dictionaryFile.files && els.dictionaryFile.files[0];
@@ -2096,7 +2312,7 @@ if (els.blockedWordsInput) {
   });
 }
 
-els.generateButton.addEventListener('click', createPuzzle);
+els.generateButton.addEventListener('click', () => createPuzzle(true));
 els.exampleButton.addEventListener('click', () => {
   els.wordInput.value = examples.join('\n');
   els.seedAcross.value = 'Katalysator';
@@ -2217,9 +2433,11 @@ if ('serviceWorker' in navigator) {
 }
 
 loadPersonalDictionary();
+loadSafeVocabulary();
 loadState();
 renderPersonalDictionaryUi();
+renderSafeVocabularyUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.5.1. Persönliche Listen stehen als Themenbasis im Mittelpunkt; der deutsche Vollfundus arbeitet als Datenbank-Füllfundus im Hintergrund.' }]);
+  setMessages([{ text: 'Bereit für v0.5.2. Persönliche Listen stehen als Themenbasis im Mittelpunkt; der deutsche Vollfundus arbeitet als Datenbank-Füllfundus im Hintergrund.' }]);
 });

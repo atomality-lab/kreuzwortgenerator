@@ -1,7 +1,7 @@
 {
   "name": "Kreuzwortdrucker",
   "short_name": "Kreuzwort",
-  "description": "PWA-Prototyp mit persönlichem Wortschatz als Themenbasis, deutschem Datenbank-Füllfundus, aufgeräumter Oberfläche und Buchsatz-Exporten.",
+  "description": "PWA-Prototyp mit persönlichem Wortschatz als Themenbasis, deutschem Datenbank-Füllfundus, Zwei-Schritt-Logik, gesichertem Wortschatz und Buchsatz-Exporten.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#1f2937" />
-  <title>Kreuzwortdrucker v0.5.1</title>
+  <title>Kreuzwortdrucker v0.5.2</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -14,7 +14,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">PWA-Prototyp</p>
-      <h1>Kreuzwortdrucker <span>v0.5.1</span></h1>
+      <h1>Kreuzwortdrucker <span>v0.5.2</span></h1>
     </div>
     <div class="header-actions">
       <button id="installButton" class="ghost hidden" type="button">App installieren</button>
@@ -25,7 +25,7 @@
   <main class="app-layout">
     <section class="panel controls" aria-labelledby="settingsTitle">
       <h2 id="settingsTitle">Rätsel erstellen</h2>
-      <p class="hint">v0.5.1 räumt die Oberfläche auf: Persönliche Listen sind die Themenbasis, der große Datenbank-Wortschatz bleibt als Füllfundus im Hintergrund und wird nur bei Bedarf durchsucht.</p>
+      <p class="hint">v0.5.2 räumt die Oberfläche auf: Persönliche Listen sind die Themenbasis, der große Datenbank-Wortschatz bleibt als Füllfundus im Hintergrund und wird nur bei Bedarf durchsucht.</p>
 
       <div class="grid two">
         <label>
@@ -44,8 +44,9 @@
           <input id="minLength" type="number" min="2" max="30" value="3" />
         </label>
         <label>
-          Max. Wörter
-          <input id="maxWords" type="number" min="1" max="200" value="40" />
+          Max. Füllwörter
+          <input id="maxWords" type="number" min="0" max="200" value="40" />
+          <span class="muted">Nur relevant, wenn der Basiswortschatz zum Füllen verwendet wird.</span>
         </label>
       </div>
 
@@ -83,14 +84,19 @@
 
       <details class="advanced">
         <summary>Leitwörter und Ausgabe</summary>
+        <p class="hint">Leitwörter können aus der aktuell ausgewählten persönlichen Liste übernommen werden. Du kannst auch frei tippen und die Leitwörter anschließend in der Liste speichern.</p>
         <label>
           Leitwort waagrecht (optional)
-          <input id="seedAcross" type="text" placeholder="z. B. PHILOSOPHIE" />
+          <input id="seedAcross" type="text" list="personalWordOptions" placeholder="z. B. PHILOSOPHIE" />
         </label>
         <label>
           Leitwort senkrecht (optional)
-          <input id="seedDown" type="text" placeholder="z. B. PARADOXON" />
+          <input id="seedDown" type="text" list="personalWordOptions" placeholder="z. B. PARADOXON" />
         </label>
+        <datalist id="personalWordOptions"></datalist>
+        <div class="button-row wrap">
+          <button id="saveSeedsToPersonal" type="button">Leitwörter in aktueller Liste speichern</button>
+        </div>
         <div class="checkbox-row">
           <input id="cropToContent" type="checkbox" checked />
           <label for="cropToContent">Export/Ansicht auf belegten Bereich zuschneiden</label>
@@ -132,41 +138,42 @@
         </div>
         <div class="button-row wrap">
           <button id="personalCreateList" type="button">Liste anlegen</button>
-          <button id="personalUseList" type="button">Liste ins Rätsel übernehmen</button>
+          <button id="personalUseList" type="button">Liste ins Themenfeld übernehmen</button>
           <button id="personalCreatePuzzleFromList" class="primary" type="button">Rätsel aus Liste erstellen</button>
         </div>
 
         <label>
-          Wort hinzufügen
-          <input id="personalWordInput" type="text" placeholder="z. B. Ambivalenz" />
+          Aktuelle Liste durchsuchen/anzeigen
+          <input id="personalSearch" type="search" placeholder="leer lassen, um die ausgewählte Liste zu sehen" />
         </label>
+        <div id="personalResults" class="personal-results empty-clue-list">Noch keine persönlichen Wörter vorhanden.</div>
+
         <label>
           In Listen speichern <span class="muted">(Mehrfachauswahl mit Strg/Klick)</span>
           <select id="personalWordListPicker" multiple size="4"></select>
         </label>
-        <p class="hint">Wenn keine Liste markiert ist, wird die aktuell ausgewählte Liste verwendet. Dieselbe Auswahl gilt auch für importierte Wortlisten.</p>
+        <label>
+          Wort hinzufügen
+          <input id="personalWordInput" type="text" placeholder="z. B. Ambivalenz" />
+        </label>
         <div class="button-row wrap">
           <button id="personalAddWord" type="button">Wort hinzufügen</button>
         </div>
+        <p class="hint">Wenn keine Liste markiert ist, wird die aktuell ausgewählte Liste verwendet. Dieselbe Auswahl gilt auch für importierte Wortlisten.</p>
 
         <label>
           Wortliste in ausgewählte Listen importieren
           <input id="personalFile" type="file" accept=".txt,.csv,text/plain,text/csv" />
         </label>
 
-        <label>
-          Persönlichen Wortschatz durchsuchen
-          <input id="personalSearch" type="search" placeholder="z. B. Erz oder Philosophie" />
-        </label>
-        <div id="personalResults" class="personal-results empty-clue-list">Noch keine persönlichen Wörter vorhanden.</div>
-
         <div class="button-row wrap personal-export-row">
-          <button id="personalExportJson" type="button">Wortschatz JSON exportieren</button>
+          <button id="personalExportJson" type="button">Persönlichen Wortschatz sichern (JSON)</button>
           <label class="file-button">
-            Wortschatz JSON importieren
+            Sicherung wiederherstellen (JSON)
             <input id="personalImportJson" type="file" accept=".json,application/json" />
           </label>
         </div>
+        <p class="hint">JSON ist die Sicherungsdatei für Deinen persönlichen und gesicherten Wortschatz inklusive Listen, Sperrungen und Zuordnungen. Vor Cache-Löschung oder Gerätewechsel bitte exportieren.</p>
       </details>
 
       <details class="advanced dictionary-tools">
@@ -177,7 +184,7 @@
           <input id="dictionaryFile" type="file" accept=".txt,.dic,text/plain" />
         </label>
         <div class="button-row wrap">
-          <button id="fillFromDictionary" type="button" disabled>Zufallswörter als Themenwörter übernehmen</button>
+          <button id="fillFromDictionary" class="hidden" type="button" disabled>Zufallswörter als Themenwörter übernehmen</button>
           <button id="clearDictionary" class="ghost" type="button" disabled>Zusatzliste entfernen</button>
         </div>
         <div id="dictionaryStatus" class="dictionary-status">Eingebauter deutscher Vollfundus wird geladen.</div>
@@ -186,6 +193,24 @@
           <input id="dictionarySearch" type="search" placeholder="z. B. METAPHER oder Maß" disabled />
         </label>
         <div id="dictionaryResults" class="dictionary-results empty-clue-list">Gib einen Suchbegriff ein, um den Datenbank-Wortschatz zu prüfen. Ohne Suche wird keine Vorschau angezeigt.</div>
+
+        <details class="advanced safe-vocabulary-tools">
+          <summary>Gesicherter Wortschatz</summary>
+          <p class="hint">Hier landen Wörter, die schon einmal im Rätsel verwendet wurden oder die Du bewusst als sicher markieren möchtest. Beim Füllen werden sie bevorzugt vor dem großen Basiswortschatz geprüft.</p>
+          <div id="safeVocabularyStatus" class="dictionary-status">Gesicherter Wortschatz wird geladen.</div>
+          <label>
+            Wort als sicher speichern
+            <input id="safeWordInput" type="text" placeholder="z. B. Erz oder Tea" />
+          </label>
+          <div class="button-row wrap">
+            <button id="safeAddWord" type="button">In gesicherten Wortschatz aufnehmen</button>
+          </div>
+          <label>
+            Gesicherten Wortschatz durchsuchen
+            <input id="safeSearch" type="search" placeholder="z. B. ERZ" />
+          </label>
+          <div id="safeVocabularyResults" class="personal-results empty-clue-list">Noch keine gesicherten Wörter vorhanden.</div>
+        </details>
       </details>
 
       <details class="advanced current-puzzle-word-tools">
@@ -206,7 +231,7 @@ UND"></textarea>
       </details>
 
       <div class="button-row">
-        <button id="generateButton" class="primary" type="button">Rätsel erstellen</button>
+        <button id="generateButton" class="primary" type="button">Rätsel erstellen / Lücken füllen</button>
         <button id="exampleButton" class="ghost" type="button">Beispiel laden</button>
       </div>
 
@@ -226,7 +251,7 @@ UND"></textarea>
       </div>
 
       <div id="gridWrap" class="grid-wrap">
-        <div class="empty-state">Klick auf „Rätsel erstellen“ und die Buchstaben nehmen Aufstellung.</div>
+        <div class="empty-state">Klick auf „Rätsel aus Liste erstellen“ oder „Rätsel erstellen / Lücken füllen“ und die Buchstaben nehmen Aufstellung.</div>
       </div>
 
       <div class="export-box">
@@ -283,7 +308,7 @@ UND"></textarea>
   </main>
 
   <footer class="app-footer">
-    <span>Kreuzwortdrucker v0.5.1</span>
+    <span>Kreuzwortdrucker v0.5.2</span>
     <span>Freiform-im-Format-Prototyp mit persönlichem Wortschatz als Themenbasis, Datenbank-Füllfundus, Fragenverwaltung und Canva-Export</span>
   </footer>
 
