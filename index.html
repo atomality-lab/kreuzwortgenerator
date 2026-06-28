@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#1f2937" />
-  <title>Kreuzwortdrucker v0.6.3</title>
+  <title>Kreuzwortdrucker v0.6.4</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -14,7 +14,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">PWA-Prototyp</p>
-      <h1>Kreuzwortdrucker <span>v0.6.3</span></h1>
+      <h1>Kreuzwortdrucker <span>v0.6.4</span></h1>
     </div>
     <div class="header-actions">
       <button id="installButton" class="ghost hidden" type="button">App installieren</button>
@@ -25,7 +25,7 @@
   <main class="app-layout">
     <section class="panel controls" aria-labelledby="settingsTitle">
       <h2 id="settingsTitle">Rätsel erstellen</h2>
-      <p class="hint">v0.6.3 repariert den Bearbeitungsmodus: einzelne Kreuzungsbuchstaben zählen nicht mehr als Fehler, und Lücken füllen respektiert den bestehenden Entwurf.</p>
+      <p class="hint">v0.6.4 vergrößert die Board-Fläche, entfernt die unpraktische Innen-Scrollleiste und ergänzt eine angepasste Form mit einem optionalen Randfeld um das Kernformat.</p>
 
       <div class="grid two">
         <label>
@@ -99,6 +99,14 @@
         <div class="button-row wrap">
           <button id="saveSeedsToPersonal" type="button">Leitwörter in aktueller Liste speichern</button>
         </div>
+        <label>
+          Brettform
+          <select id="boardShapeMode">
+            <option value="rectangle" selected>Klassisches Rechteck</option>
+            <option value="custom">Angepasste Form: 1 Feld Rand oben/unten/links/rechts</option>
+          </select>
+          <span class="muted">Beim angepassten Modus bleibt das eingestellte Format der Kern. Die App legt außen einen zusätzlichen Bearbeitungsrand an, der für klassische überstehende Rätselkonturen genutzt werden kann.</span>
+        </label>
         <div class="checkbox-row">
           <input id="cropToContent" type="checkbox" checked />
           <label for="cropToContent">Export/Ansicht auf belegten Bereich zuschneiden</label>
@@ -267,7 +275,7 @@ UND"></textarea>
       <div id="editTools" class="edit-tools hidden" aria-label="Bearbeitungswerkzeuge">
         <div>
           <h3>Bearbeitungsmodus</h3>
-          <p class="hint">Alle Felder des Formats werden angezeigt. Leere Buchstabenfelder sind hellgrau, schwarze Felder dunkel. Änderungen werden in die aktuelle Rätselstruktur übernommen.</p>
+          <p class="hint">Alle Felder der Arbeitsfläche werden angezeigt. Leere Buchstabenfelder sind hellgrau, schwarze Felder dunkel. Bei angepasster Form ist der Zusatzrand leicht markiert. Änderungen werden in die aktuelle Rätselstruktur übernommen.</p>
         </div>
         <div class="button-row wrap" role="group" aria-label="Werkzeug wählen">
           <button id="editLetterTool" class="active" type="button">Buchstaben bearbeiten</button>
@@ -331,8 +339,8 @@ UND"></textarea>
   </main>
 
   <footer class="app-footer">
-    <span>Kreuzwortdrucker v0.6.3</span>
-    <span>Themenlisten, Datenbank-Füllfundus, bewusster Sicherung, Bearbeitungsmodus, Fragenverwaltung und Canva-Export</span>
+    <span>Kreuzwortdrucker v0.6.4</span>
+    <span>Themenlisten, Datenbank-Füllfundus, bewusster Sicherung, Bearbeitungsmodus, angepasster Brettform, Fragenverwaltung und Canva-Export</span>
   </footer>
 
   <script src="builtin-de.js"></script>

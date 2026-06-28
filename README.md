@@ -1,20 +1,22 @@
-# Kreuzwortdrucker v0.6.3
+# Kreuzwortdrucker v0.6.4
 
-PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit großem deutschem Wortfundus, persönlichem Wortschatz, zweistufiger Fülllogik, Fragenverwaltung und SVG-/TXT-/CSV-Export.
+PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit großem deutschem Wortfundus, persönlichem Wortschatz, zweistufiger Fülllogik, Bearbeitungsmodus, Fragenverwaltung und SVG-/TXT-/CSV-Export.
 
-## Neu in v0.6.3
+## Neu in v0.6.4
 
-- Konsistenzprüfung korrigiert: einzelne Kreuzungsbuchstaben werden nicht mehr fälschlich als zu kurze Wörter markiert.
-- Ein einzelnes Feld wird nur noch als Fehler gewertet, wenn es wirklich isoliert steht und zu keinem längeren Wort gehört.
-- **Rätsel erstellen / Lücken füllen** respektiert jetzt einen bestehenden bearbeiteten Entwurf.
-- Manuell gesetzte Buchstaben bleiben beim Füllen erhalten.
-- Explizit gesetzte Schwarzfelder bleiben beim Füllen erhalten.
-- Füllwörter werden nur ergänzt, wenn sie passend an vorhandene Buchstaben kreuzen.
-- Der Bearbeitungsmodus speichert nun explizit gesetzte Schwarzfelder im Projektstand.
+- Der mittlere Vorschau-/Board-Bereich wurde deutlich vergrößert.
+- Die unpraktische Innen-Scrollleiste im Boardbereich wurde entfernt.
+- SVG-Gitter skalieren sich stärker an die verfügbare Boardbreite an.
+- Der Bearbeitungsmodus nutzt ein responsives Raster, damit auch größere Boards besser sichtbar bleiben.
+- Neue Einstellung **Brettform**:
+  - **Klassisches Rechteck**
+  - **Angepasste Form: 1 Feld Rand oben/unten/links/rechts**
+- Im angepassten Modus bleibt das eingestellte Format der Kern, z. B. 22 × 15. Die App ergänzt außen einen zusätzlichen Bearbeitungsrand, sodass oben, unten, links oder rechts ein Feld überstehen kann.
+- Der Zusatzrand wird im Bearbeitungsmodus dezent markiert.
 
 ## Bereits enthalten
 
-- einstellbares Format, z. B. 22 × 15
+- einstellbares Kernformat, z. B. 22 × 15
 - großer eingebauter deutscher Wörterbuchfundus auf Basis von `@cspell/dict-de-de` 4.1.2 / de-DE_frami / igerman98
 - Zusatzlisten-Import für fremdsprachige Wörter, Fachbegriffe oder Eigennamen
 - automatische Umschrift Ä/Ö/Ü/ß zu AE/OE/UE/SS
@@ -48,7 +50,11 @@ PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit gr
 8. Gute verwendete Wörter in der Lösungsliste bewusst über **„sichern“** in den gesicherten Wortschatz übernehmen.
 9. Ungeeignete Wörter über **„nicht verwenden“** ausschließen. Sie werden dann nicht bevorzugt gespeichert.
 
-Wenn keine Zielliste für ein neues Wort oder einen Import markiert ist, wird die aktuell ausgewählte Liste verwendet.
+## Angepasste Brettform
+
+Die angepasste Form ist ein Zwischenschritt Richtung klassischer Rätsel mit nicht ganz rechteckiger Außenkontur. Wenn Du z. B. 22 × 15 einstellst, bleibt dies das Kernformat. Die Arbeitsfläche wird intern um einen Rand erweitert, sodass einzelne Wörter oben, unten, links oder rechts um ein Feld überstehen können.
+
+Das ist noch kein vollständiger Vollraster-Generator mit Begrenzungslinien, aber die Oberfläche und der Bearbeitungsmodus sind dafür vorbereitet.
 
 ## Lokal starten
 
@@ -76,10 +82,6 @@ Bei GitHub Pages, Netlify oder installierter PWA kann der Service Worker alte Da
 
 Vor dem Löschen von Website-Daten bitte den persönlichen Wortschatz als JSON exportieren.
 
-## Hinweise zum Bearbeitungsmodus
-
-Der Bearbeitungsmodus arbeitet zunächst mit dem Schwarzfeld-Modell. Nicht belegte Felder sind schwarze Sperrfelder, können aber in leere Buchstabenfelder umgewandelt werden. Die spätere Vollraster-Variante mit Begrenzungslinien ohne schwarze Felder bleibt eine eigene Generatorstufe.
-
 ## Hinweis zur nächsten Generatorstufe
 
-v0.6.3 repariert den ersten Bearbeitungsmodus. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.
+v0.6.4 verbessert Layout und Brettform. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.

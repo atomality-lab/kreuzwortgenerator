@@ -1,8 +1,8 @@
 'use strict';
 
-const VERSION = '0.6.3';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.6.3.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.6.2.lastState', 'kreuzwortdrucker.v0.6.1.lastState', 'kreuzwortdrucker.v0.6.0.lastState', 'kreuzwortdrucker.v0.5.3.lastState', 'kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.6.4';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.6.4.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.6.3.lastState', 'kreuzwortdrucker.v0.6.2.lastState', 'kreuzwortdrucker.v0.6.1.lastState', 'kreuzwortdrucker.v0.6.0.lastState', 'kreuzwortdrucker.v0.5.3.lastState', 'kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
@@ -22,6 +22,7 @@ const els = {
   personalWordOptions: document.querySelector('#personalWordOptions'),
   cropToContent: document.querySelector('#cropToContent'),
   gridDisplayMode: document.querySelector('#gridDisplayMode'),
+  boardShapeMode: document.querySelector('#boardShapeMode'),
   cellSize: document.querySelector('#cellSize'),
   baseName: document.querySelector('#baseName'),
   wordInput: document.querySelector('#wordInput'),
@@ -2023,7 +2024,7 @@ function renderEditGrid(puzzle) {
   const openSet = getOpenCellSet(puzzle);
   const errorSet = new Set(Array.isArray(puzzle.validation && puzzle.validation.errorCells) ? puzzle.validation.errorCells : []);
   const rows = [];
-  rows.push(`<div class="edit-grid" style="grid-template-columns: repeat(${width}, minmax(1.75rem, 2.25rem));" data-edit-tool="${currentEditTool}">`);
+  rows.push(`<div class="edit-grid" style="--edit-cols: ${width}; grid-template-columns: repeat(${width}, minmax(0, 1fr));" data-edit-tool="${currentEditTool}">`);
   for (let r = 0; r < height; r += 1) {
     for (let c = 0; c < width; c += 1) {
       const key = cellKey(r, c);
@@ -2032,6 +2033,7 @@ function renderEditGrid(puzzle) {
       const isBlack = !letter && !isOpen;
       const isError = errorSet.has(key);
       const classes = ['edit-cell'];
+      if (isShapeMarginCell(puzzle, r, c)) classes.push('edit-shape-margin');
       if (isBlack) classes.push('edit-black');
       else if (!letter) classes.push('edit-open');
       else classes.push('edit-letter');
@@ -2309,10 +2311,52 @@ function setMessages(messages) {
   els.messages.innerHTML = messages.map((message) => `<div class="message ${message.type || ''}">${escapeHtml(message.text)}</div>`).join('');
 }
 
-function getSettings() {
+
+function getBoardShapeLabel(mode) {
+  if (mode === 'custom') return 'angepasste Form mit 1-Feld-Rand';
+  return 'klassisches Rechteck';
+}
+
+function getWorkingSize(coreWidth, coreHeight, boardShapeMode) {
+  const extra = boardShapeMode === 'custom' ? 2 : 0;
   return {
-    width: clampNumber(els.gridWidth.value, 5, 40, 22),
-    height: clampNumber(els.gridHeight.value, 5, 40, 15),
+    width: coreWidth + extra,
+    height: coreHeight + extra,
+    coreWidth,
+    coreHeight,
+    margin: boardShapeMode === 'custom' ? 1 : 0,
+  };
+}
+
+function isShapeMarginCell(puzzle, row, col) {
+  const settings = puzzle && puzzle.settings;
+  if (!settings || settings.boardShapeMode !== 'custom') return false;
+  const margin = Number(settings.shapeMargin || 1);
+  const coreWidth = Number(settings.coreWidth || settings.width - margin * 2);
+  const coreHeight = Number(settings.coreHeight || settings.height - margin * 2);
+  return row < margin || col < margin || row >= margin + coreHeight || col >= margin + coreWidth;
+}
+
+function formatPuzzleSize(settings) {
+  if (!settings) return 'unbekannt';
+  if (settings.boardShapeMode === 'custom') {
+    return `${settings.coreWidth || settings.width - 2} × ${settings.coreHeight || settings.height - 2} Kern, Arbeitsfläche ${settings.width} × ${settings.height}`;
+  }
+  return `${settings.width} × ${settings.height}`;
+}
+
+function getSettings() {
+  const coreWidth = clampNumber(els.gridWidth.value, 5, 40, 22);
+  const coreHeight = clampNumber(els.gridHeight.value, 5, 40, 15);
+  const boardShapeMode = els.boardShapeMode ? els.boardShapeMode.value : 'rectangle';
+  const workingSize = getWorkingSize(coreWidth, coreHeight, boardShapeMode);
+  return {
+    width: workingSize.width,
+    height: workingSize.height,
+    coreWidth: workingSize.coreWidth,
+    coreHeight: workingSize.coreHeight,
+    shapeMargin: workingSize.margin,
+    boardShapeMode,
     minLength: clampNumber(els.minLength.value, 2, 30, 3),
     maxWords: clampNumber(els.maxWords.value, 0, 200, 40),
     maxFillerWords: clampNumber(els.maxWords.value, 0, 200, 40),
@@ -2355,7 +2399,7 @@ function updatePuzzleStatsAndMessages(messages = []) {
   const used = getUsedCells(currentPuzzle.grid).length;
   const placedCount = currentPuzzle.placed.length;
   const themeUnplacedCount = getThemeUnplacedWords(currentPuzzle).length;
-  els.stats.textContent = `${placedCount} Wörter platziert, ${themeUnplacedCount} Themenwörter nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
+  els.stats.textContent = `${placedCount} Wörter platziert, ${themeUnplacedCount} Themenwörter nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Format: ${formatPuzzleSize(settings)}. Brettform: ${getBoardShapeLabel(settings.boardShapeMode)}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
   if (messages.length) setMessages(messages);
 }
 
@@ -2443,7 +2487,7 @@ function createPuzzle(useDictionary = true) {
   const placedCount = currentPuzzle.placed.length;
   const themeUnplacedCount = getThemeUnplacedWords(currentPuzzle).length;
   const dictionaryUnplacedCount = currentPuzzle.unplaced.filter((word) => word.source === 'dictionary' || word.source === 'safe').length;
-  els.stats.textContent = `${placedCount} Wörter platziert, ${themeUnplacedCount} Themenwörter nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
+  els.stats.textContent = `${placedCount} Wörter platziert, ${themeUnplacedCount} Themenwörter nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Format: ${formatPuzzleSize(settings)}. Brettform: ${getBoardShapeLabel(settings.boardShapeMode)}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
   setMessages([
     { type: placedCount ? 'ok' : 'error', text: placedCount ? (useDictionary ? `Rätsel erzeugt und gefüllt: ${placedCount} Wörter wurden platziert.` : `Rätsel aus Themenliste erzeugt: ${placedCount} Wörter wurden platziert.`) : 'Es konnte kein Startwort platziert werden.' },
     ...(themeUnplacedCount ? [{ text: `${themeUnplacedCount} Themenwörter konnten nicht sinnvoll gekreuzt werden. Sie stehen unten in der Prüfliste.` }] : []),
@@ -2559,6 +2603,7 @@ function saveState() {
       seedDown: els.seedDown.value,
       cropToContent: els.cropToContent.checked,
       gridDisplayMode: els.gridDisplayMode ? els.gridDisplayMode.value : 'black',
+      boardShapeMode: els.boardShapeMode ? els.boardShapeMode.value : 'rectangle',
       cellSize: els.cellSize.value,
       baseName: els.baseName.value,
       wordInput: els.wordInput.value,
@@ -2620,6 +2665,7 @@ function resetState() {
   els.seedDown.value = '';
   els.cropToContent.checked = true;
   if (els.gridDisplayMode) els.gridDisplayMode.value = 'black';
+  if (els.boardShapeMode) els.boardShapeMode.value = 'rectangle';
   els.cellSize.value = '42';
   els.baseName.value = 'raetsel_001';
   els.wordInput.value = '';
@@ -2837,7 +2883,7 @@ if (els.dictionarySearch) {
   });
 }
 
-[els.minLength, els.gridWidth, els.gridHeight, els.maxWords, els.wordFormMode, els.nounWeight, els.adjectiveWeight, els.verbWeight, els.otherWeight, els.gridDisplayMode].filter(Boolean).forEach((input) => {
+[els.minLength, els.gridWidth, els.gridHeight, els.maxWords, els.wordFormMode, els.nounWeight, els.adjectiveWeight, els.verbWeight, els.otherWeight, els.gridDisplayMode, els.boardShapeMode].filter(Boolean).forEach((input) => {
   input.addEventListener('change', () => {
     renderDictionaryResults();
     saveState();
@@ -2905,7 +2951,7 @@ els.gridWrap.addEventListener('click', (event) => {
   toggleEditBlock(row, col);
 });
 
-[els.cropToContent, els.cellSize, els.gridDisplayMode].filter(Boolean).forEach((input) => input.addEventListener('change', () => {
+[els.cropToContent, els.cellSize, els.gridDisplayMode, els.boardShapeMode].filter(Boolean).forEach((input) => input.addEventListener('change', () => {
   saveState();
   renderPuzzle();
 }));
@@ -3005,5 +3051,5 @@ renderPersonalDictionaryUi();
 renderSafeVocabularyUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.6.3. Neu: Konsistenzprüfung ignoriert reine Kreuzungs-Einzelbuchstaben; Lücken füllen respektiert bearbeitete Raster.' }]);
+  setMessages([{ text: 'Bereit für v0.6.4. Neu: größere Board-Fläche ohne Innen-Scrollleiste und optionale angepasste Form mit 1-Feld-Rand.' }]);
 });
