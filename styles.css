@@ -695,3 +695,97 @@ button.mini {
   color: var(--muted);
   font-weight: 400;
 }
+
+.edit-tools {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid var(--line);
+}
+
+.edit-tools .button-row button.active {
+  background: var(--ink);
+  color: white;
+}
+
+.validation-summary {
+  margin-top: 0.8rem;
+}
+
+.validation-summary.ok {
+  background: rgba(22, 101, 52, 0.08);
+  border-color: rgba(22, 101, 52, 0.18);
+  color: var(--ok);
+}
+
+.validation-summary ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.edit-grid {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  justify-content: center;
+  width: max-content;
+  max-width: none;
+}
+
+.edit-cell {
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  border: 1px solid #111827;
+  text-align: center;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 1.05rem;
+  font-family: Arial, Helvetica, sans-serif;
+  box-shadow: none;
+}
+
+.edit-cell:focus {
+  outline: 3px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 1px;
+  border-color: #111827;
+  box-shadow: none;
+}
+
+.edit-cell.edit-letter {
+  background: #ffffff;
+  color: #111827;
+}
+
+.edit-cell.edit-open {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.edit-cell.edit-black {
+  background: #111111;
+  color: transparent;
+  caret-color: white;
+}
+
+.edit-grid[data-edit-tool="block"] .edit-cell {
+  cursor: pointer;
+}
+
+.edit-grid[data-edit-tool="block"] .edit-cell:focus {
+  outline-color: rgba(180, 83, 9, 0.38);
+}
+
+.edit-cell.edit-error {
+  background: #fecaca;
+  border-color: #b91c1c;
+  color: #7f1d1d;
+}
+
+.edit-cell.edit-black.edit-error {
+  background: #7f1d1d;
+  color: transparent;
+}

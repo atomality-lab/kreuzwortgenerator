@@ -1,8 +1,8 @@
 'use strict';
 
-const VERSION = '0.6.1';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.6.1.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.6.0.lastState', 'kreuzwortdrucker.v0.5.3.lastState', 'kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.6.2';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.6.2.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.6.1.lastState', 'kreuzwortdrucker.v0.6.0.lastState', 'kreuzwortdrucker.v0.5.3.lastState', 'kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
@@ -60,6 +60,12 @@ const els = {
   gridWrap: document.querySelector('#gridWrap'),
   emptyViewButton: document.querySelector('#emptyViewButton'),
   solutionViewButton: document.querySelector('#solutionViewButton'),
+  editViewButton: document.querySelector('#editViewButton'),
+  editTools: document.querySelector('#editTools'),
+  editLetterTool: document.querySelector('#editLetterTool'),
+  editBlockTool: document.querySelector('#editBlockTool'),
+  validateEditButton: document.querySelector('#validateEditButton'),
+  validationSummary: document.querySelector('#validationSummary'),
   exportEmptySvg: document.querySelector('#exportEmptySvg'),
   exportSolutionSvg: document.querySelector('#exportSolutionSvg'),
   exportSolutionsTxt: document.querySelector('#exportSolutionsTxt'),
@@ -84,6 +90,7 @@ const examples = [
 
 let currentPuzzle = null;
 let currentView = 'empty';
+let currentEditTool = 'letter';
 let deferredInstallPrompt = null;
 let clueBank = {};
 let importedDictionaryState = { entries: [], stats: null, sourceName: '', importedAt: null, ambiguousSample: [] };
@@ -1742,7 +1749,249 @@ function generatePuzzle(options) {
     numbers: numbered.numbers,
     entries: numbered.entries,
     bounds: getBounds(grid),
+    openCells: [],
+    validation: null,
   };
+}
+
+
+function getOpenCellSet(puzzle = currentPuzzle) {
+  return new Set(Array.isArray(puzzle && puzzle.openCells) ? puzzle.openCells : []);
+}
+
+function setOpenCellSet(puzzle, openSet) {
+  if (!puzzle) return;
+  puzzle.openCells = Array.from(openSet).sort();
+}
+
+function cellKey(row, col) {
+  return `${row},${col}`;
+}
+
+function isCellOpenForEditing(puzzle, row, col) {
+  if (!puzzle) return false;
+  if (puzzle.grid[row] && puzzle.grid[row][col]) return true;
+  return getOpenCellSet(puzzle).has(cellKey(row, col));
+}
+
+function refreshPuzzleStructureAfterManualEdit() {
+  if (!currentPuzzle) return;
+  const numbered = numberGrid(currentPuzzle.grid);
+  currentPuzzle.numbers = numbered.numbers;
+  currentPuzzle.entries = numbered.entries;
+  currentPuzzle.bounds = getBounds(currentPuzzle.grid);
+  const existingClues = collectCurrentClues();
+  currentPuzzle = attachCluesToPuzzle(currentPuzzle, existingClues);
+}
+
+function setEditTool(tool) {
+  currentEditTool = tool === 'block' ? 'block' : 'letter';
+  if (els.editLetterTool) els.editLetterTool.classList.toggle('active', currentEditTool === 'letter');
+  if (els.editBlockTool) els.editBlockTool.classList.toggle('active', currentEditTool === 'block');
+  renderPuzzle();
+}
+
+function normalizeEditLetter(value) {
+  const clean = normalizeWord(value).grid;
+  return clean ? clean[0] : '';
+}
+
+function markPuzzleValidation(issues, errorCells) {
+  if (!currentPuzzle) return;
+  currentPuzzle.validation = {
+    checkedAt: new Date().toISOString(),
+    issues,
+    errorCells: Array.from(errorCells).sort(),
+  };
+}
+
+function isKnownGridWord(gridWord, settings = getSettings()) {
+  if (!gridWord) return false;
+  const blocked = getBlockedGridSet(settings.blockedWordsText || '');
+  if (blocked.has(gridWord)) return false;
+  const personal = personalDictionary.words[gridWord];
+  if (personal && !personal.blocked) return true;
+  if (safeVocabulary.words[gridWord]) return true;
+  const dictionaryEntry = dictionaryIndex.get(gridWord);
+  if (!dictionaryEntry) return false;
+  return isAllowedDatabaseBaseForm(dictionaryEntry, settings.wordFormMode || 'basic');
+}
+
+function getValidationSegmentLabel(direction) {
+  return direction === 'across' ? 'waagrecht' : 'senkrecht';
+}
+
+function readActiveSegmentsForValidation(puzzle, direction) {
+  const grid = puzzle.grid;
+  const height = grid.length;
+  const width = grid[0].length;
+  const openSet = getOpenCellSet(puzzle);
+  const active = (row, col) => inside(width, height, row, col) && (Boolean(grid[row][col]) || openSet.has(cellKey(row, col)));
+  const { dr, dc } = axisDelta(direction);
+  const segments = [];
+
+  for (let r = 0; r < height; r += 1) {
+    for (let c = 0; c < width; c += 1) {
+      if (!active(r, c)) continue;
+      if (active(r - dr, c - dc)) continue;
+      const cells = [];
+      let value = '';
+      let hasEmpty = false;
+      let rr = r;
+      let cc = c;
+      while (active(rr, cc)) {
+        const letter = grid[rr][cc] || '';
+        if (!letter) hasEmpty = true;
+        value += letter || '_';
+        cells.push({ row: rr, col: cc, letter });
+        rr += dr;
+        cc += dc;
+      }
+      segments.push({ direction, row: r, col: c, value, cells, hasEmpty, length: cells.length });
+    }
+  }
+  return segments;
+}
+
+function validateManualGrid() {
+  if (!currentPuzzle) return;
+  const settings = getSettings();
+  refreshPuzzleStructureAfterManualEdit();
+  const segments = [
+    ...readActiveSegmentsForValidation(currentPuzzle, 'across'),
+    ...readActiveSegmentsForValidation(currentPuzzle, 'down'),
+  ];
+  const issues = [];
+  const errorCells = new Set();
+  const seenCompleted = new Map();
+
+  const markSegment = (segment) => segment.cells.forEach((cell) => errorCells.add(cellKey(cell.row, cell.col)));
+
+  segments.forEach((segment) => {
+    const dir = getValidationSegmentLabel(segment.direction);
+    const position = `Zeile ${segment.row + 1}, Spalte ${segment.col + 1}`;
+    if (segment.length === 1) {
+      if (segment.cells[0].letter || segment.hasEmpty) {
+        issues.push(`Einzelfeld ${dir} bei ${position}: zu kurz für ein Rätselwort.`);
+        markSegment(segment);
+      }
+      return;
+    }
+    if (segment.length < settings.minLength) {
+      issues.push(`${segment.value} ${dir} bei ${position}: kürzer als Mindestlänge ${settings.minLength}.`);
+      markSegment(segment);
+      return;
+    }
+    if (segment.hasEmpty) {
+      issues.push(`${segment.value} ${dir} bei ${position}: enthält noch leere Buchstabenfelder.`);
+      markSegment(segment);
+      return;
+    }
+    const word = segment.value;
+    const blocked = getBlockedGridSet(settings.blockedWordsText || '').has(word) || (personalDictionary.words[word] && personalDictionary.words[word].blocked);
+    if (blocked) {
+      issues.push(`${word} ${dir} bei ${position}: ist als „nicht verwenden“ markiert.`);
+      markSegment(segment);
+      return;
+    }
+    if (!isKnownGridWord(word, settings)) {
+      issues.push(`${word} ${dir} bei ${position}: nicht im persönlichen, gesicherten oder Datenbank-Wortschatz gefunden.`);
+      markSegment(segment);
+      return;
+    }
+    const duplicateKey = word;
+    if (seenCompleted.has(duplicateKey)) {
+      issues.push(`${word} ${dir} bei ${position}: Wort kommt mehrfach im Entwurf vor.`);
+      markSegment(segment);
+      const previous = seenCompleted.get(duplicateKey);
+      previous.cells.forEach((cell) => errorCells.add(cellKey(cell.row, cell.col)));
+      return;
+    }
+    seenCompleted.set(duplicateKey, segment);
+  });
+
+  markPuzzleValidation(issues, errorCells);
+  if (els.validationSummary) {
+    if (issues.length) {
+      els.validationSummary.classList.remove('ok');
+      els.validationSummary.innerHTML = `<strong>${issues.length} Hinweise gefunden.</strong><ul>${issues.slice(0, 18).map((issue) => `<li>${escapeHtml(issue)}</li>`).join('')}${issues.length > 18 ? '<li>Weitere Hinweise ausgeblendet.</li>' : ''}</ul>`;
+    } else {
+      els.validationSummary.classList.add('ok');
+      els.validationSummary.innerHTML = '<strong>Keine Konsistenzfehler gefunden.</strong> Der Entwurf wirkt exportbereit.';
+    }
+  }
+  setMessages([{ type: issues.length ? 'error' : 'ok', text: issues.length ? `${issues.length} Konsistenzhinweise gefunden. Fehlerhafte Felder sind hellrot markiert.` : 'Konsistenzprüfung erfolgreich: keine Fehler gefunden.' }]);
+  saveState();
+  renderPuzzle();
+}
+
+function renderEditGrid(puzzle) {
+  const width = puzzle.grid[0].length;
+  const height = puzzle.grid.length;
+  const openSet = getOpenCellSet(puzzle);
+  const errorSet = new Set(Array.isArray(puzzle.validation && puzzle.validation.errorCells) ? puzzle.validation.errorCells : []);
+  const rows = [];
+  rows.push(`<div class="edit-grid" style="grid-template-columns: repeat(${width}, minmax(1.75rem, 2.25rem));" data-edit-tool="${currentEditTool}">`);
+  for (let r = 0; r < height; r += 1) {
+    for (let c = 0; c < width; c += 1) {
+      const key = cellKey(r, c);
+      const letter = puzzle.grid[r][c] || '';
+      const isOpen = openSet.has(key);
+      const isBlack = !letter && !isOpen;
+      const isError = errorSet.has(key);
+      const classes = ['edit-cell'];
+      if (isBlack) classes.push('edit-black');
+      else if (!letter) classes.push('edit-open');
+      else classes.push('edit-letter');
+      if (isError) classes.push('edit-error');
+      rows.push(`<input class="${classes.join(' ')}" data-row="${r}" data-col="${c}" maxlength="2" value="${escapeHtml(letter)}" aria-label="Zeile ${r + 1}, Spalte ${c + 1}" title="Zeile ${r + 1}, Spalte ${c + 1}${isBlack ? ' · schwarzes Feld' : ''}" ${currentEditTool === 'block' ? 'readonly' : ''} />`);
+    }
+  }
+  rows.push('</div>');
+  return rows.join('');
+}
+
+function handleEditCellInput(input) {
+  if (!currentPuzzle || currentEditTool !== 'letter') return;
+  const row = Number.parseInt(input.dataset.row, 10);
+  const col = Number.parseInt(input.dataset.col, 10);
+  if (!inside(currentPuzzle.grid[0].length, currentPuzzle.grid.length, row, col)) return;
+  const openSet = getOpenCellSet(currentPuzzle);
+  const letter = normalizeEditLetter(input.value);
+  if (letter) {
+    currentPuzzle.grid[row][col] = letter;
+    openSet.delete(cellKey(row, col));
+  } else {
+    currentPuzzle.grid[row][col] = null;
+    openSet.add(cellKey(row, col));
+  }
+  setOpenCellSet(currentPuzzle, openSet);
+  currentPuzzle.validation = null;
+  refreshPuzzleStructureAfterManualEdit();
+  saveState();
+  renderPuzzle();
+  const next = els.gridWrap.querySelector(`input[data-row="${row}"][data-col="${col}"]`);
+  if (next) next.focus();
+}
+
+function toggleEditBlock(row, col) {
+  if (!currentPuzzle) return;
+  const openSet = getOpenCellSet(currentPuzzle);
+  const key = cellKey(row, col);
+  const hasLetter = Boolean(currentPuzzle.grid[row][col]);
+  const isOpen = openSet.has(key);
+  if (hasLetter || isOpen) {
+    currentPuzzle.grid[row][col] = null;
+    openSet.delete(key);
+  } else {
+    currentPuzzle.grid[row][col] = null;
+    openSet.add(key);
+  }
+  setOpenCellSet(currentPuzzle, openSet);
+  currentPuzzle.validation = null;
+  refreshPuzzleStructureAfterManualEdit();
+  saveState();
+  renderPuzzle();
 }
 
 function numberGrid(grid) {
@@ -1817,7 +2066,9 @@ function buildSvg(puzzle, view, settings) {
       const x = padding + (c - bounds.minCol) * cell;
       const y = padding + (r - bounds.minRow) * cell;
       const letter = puzzle.grid[r][c];
-      if (!letter) {
+      const openSet = getOpenCellSet(puzzle);
+      const isOpenEmpty = !letter && openSet.has(cellKey(r, c));
+      if (!letter && !isOpenEmpty) {
         if (displayMode === 'black') {
           lines.push(`<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="#111111"/>`);
         }
@@ -1842,12 +2093,20 @@ function buildSvg(puzzle, view, settings) {
 function renderPuzzle() {
   if (!currentPuzzle) return;
   const settings = getSettings();
-  const svg = buildSvg(currentPuzzle, currentView, settings);
-  els.gridWrap.innerHTML = svg;
-  const svgEl = els.gridWrap.querySelector('svg');
-  if (svgEl) svgEl.classList.add('crossword-svg');
+  if (currentView === 'edit') {
+    els.gridWrap.innerHTML = renderEditGrid(currentPuzzle);
+  } else {
+    const svg = buildSvg(currentPuzzle, currentView, settings);
+    els.gridWrap.innerHTML = svg;
+    const svgEl = els.gridWrap.querySelector('svg');
+    if (svgEl) svgEl.classList.add('crossword-svg');
+  }
   els.emptyViewButton.classList.toggle('active', currentView === 'empty');
   els.solutionViewButton.classList.toggle('active', currentView === 'solution');
+  if (els.editViewButton) els.editViewButton.classList.toggle('active', currentView === 'edit');
+  if (els.editTools) els.editTools.classList.toggle('hidden', currentView !== 'edit');
+  if (els.editLetterTool) els.editLetterTool.classList.toggle('active', currentEditTool === 'letter');
+  if (els.editBlockTool) els.editBlockTool.classList.toggle('active', currentEditTool === 'block');
   renderLists();
   renderClueEditors();
 }
@@ -2189,6 +2448,8 @@ function resetState() {
   updateButtons(false);
   els.stats.textContent = 'Noch kein Rätsel erzeugt.';
   els.gridWrap.innerHTML = '<div class="empty-state">Klick auf „Rätsel erstellen“ und die Buchstaben nehmen Aufstellung.</div>';
+  if (els.editTools) els.editTools.classList.add('hidden');
+  if (els.validationSummary) els.validationSummary.textContent = 'Noch keine Prüfung durchgeführt.';
   els.acrossList.innerHTML = '';
   els.downList.innerHTML = '';
   els.unplacedList.innerHTML = '';
@@ -2438,6 +2699,28 @@ els.solutionViewButton.addEventListener('click', () => {
   currentView = 'solution';
   renderPuzzle();
 });
+if (els.editViewButton) {
+  els.editViewButton.addEventListener('click', () => {
+    currentView = 'edit';
+    renderPuzzle();
+  });
+}
+if (els.editLetterTool) els.editLetterTool.addEventListener('click', () => setEditTool('letter'));
+if (els.editBlockTool) els.editBlockTool.addEventListener('click', () => setEditTool('block'));
+if (els.validateEditButton) els.validateEditButton.addEventListener('click', validateManualGrid);
+
+els.gridWrap.addEventListener('input', (event) => {
+  const input = event.target.closest('input.edit-cell');
+  if (!input) return;
+  handleEditCellInput(input);
+});
+els.gridWrap.addEventListener('click', (event) => {
+  const input = event.target.closest('input.edit-cell');
+  if (!input || currentEditTool !== 'block') return;
+  const row = Number.parseInt(input.dataset.row, 10);
+  const col = Number.parseInt(input.dataset.col, 10);
+  toggleEditBlock(row, col);
+});
 
 [els.cropToContent, els.cellSize, els.gridDisplayMode].filter(Boolean).forEach((input) => input.addEventListener('change', () => {
   saveState();
@@ -2539,5 +2822,5 @@ renderPersonalDictionaryUi();
 renderSafeVocabularyUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.6.1. Der Datenbank-Füllfundus ist jetzt standardmäßig streng rätselgeeignet: Substantive und Pluralformen ja, konjugierte Verben nein.' }]);
+  setMessages([{ text: 'Bereit für v0.6.2. Neu: Bearbeitungsmodus mit Buchstabenwerkzeug, Schwarzfeld-Werkzeug und Konsistenzprüfung.' }]);
 });

@@ -1,18 +1,18 @@
-# Kreuzwortdrucker v0.6.1
+# Kreuzwortdrucker v0.6.2
 
 PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit großem deutschem Wortfundus, persönlichem Wortschatz, zweistufiger Fülllogik, Fragenverwaltung und SVG-/TXT-/CSV-Export.
 
-## Neu in v0.6.1
+## Neu in v0.6.2
 
-- Datenbank-Füllwortschatz standardmäßig deutlich strenger gefiltert.
-- Standardmodus: **Substantive und Substantiv-Mehrzahl ja, konjugierte Datenbank-Verben nein**.
-- Kleingeschriebene Datenbankwörter werden im Standardmodus nicht mehr als normale Füllkandidaten verwendet. Dadurch sollen Formen wie `UMFLOG`, `ANHEIMGAB`, `ABBAUTEST` oder ähnliche Vergangenheits-/Konjugationsformen nicht mehr nachrutschen.
-- Persönliche Wörter und bewusst gesicherte Wörter bleiben unverändert erlaubt. Wenn ein Verb oder ein Fremdwort bewusst gewünscht ist, kann es über den persönlichen oder gesicherten Wortschatz genutzt werden.
-- Neue Datenbank-Formenoption **Vorsichtig: Substantive, ungebeugte Adjektive und Infinitive**, falls bewusst auch Datenbank-Adjektive oder Infinitive zugelassen werden sollen.
-- Standard-Füllgewichtung von 60:20:10:10 auf **90:0:0:10** geändert.
-- Mehrdeutige Gitterformen bevorzugen jetzt Umlaut- und Substantiv-Schreibweisen, wenn mehrere Originalformen zur selben Gitterform führen.
-- Die bewusste Sicherungslogik aus v0.6.0 bleibt erhalten: Wörter landen erst nach Klick auf **„sichern“** im gesicherten Wortschatz.
-- Wird ein Wort über **„nicht verwenden“** ausgeschlossen, wird es zusätzlich aus dem gesicherten Wortschatz entfernt.
+- Neuer Schwarzfeld-Bearbeitungsmodus in der Vorschau.
+- Neue Ansicht **Bearbeiten** neben **Leer** und **Gelöst**.
+- Alle Felder des gewählten Formats werden im Bearbeitungsmodus angezeigt.
+- Schwarze Felder können per Werkzeug **Schwarzfelder setzen/löschen** in leere Buchstabenfelder umgewandelt werden und umgekehrt.
+- Buchstaben können direkt im Raster geändert, ergänzt oder gelöscht werden.
+- Leere Buchstabenfelder werden hellgrau dargestellt.
+- Button **Konsistenz prüfen** prüft den Entwurf und markiert Fehler hellrot.
+- Geprüft werden unter anderem offene Felder, zu kurze Wörter, ausgeschlossene Wörter, unbekannte Wörter und doppelte Wörter.
+- Die Nummerierung, Lösungsliste und Fragenfelder werden nach manuellen Änderungen aktualisiert.
 
 ## Bereits enthalten
 
@@ -27,7 +27,7 @@ PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit gr
 - persönliche Listen mit Mehrfachzuordnung
 - gesicherter Wortschatz als bevorzugter Füllwortspeicher
 - automatische Nummerierung
-- leere und gelöste Ansicht
+- leere, gelöste und bearbeitbare Ansicht
 - Fragenfelder für Waagrecht/Senkrecht
 - Export leeres Gitter als SVG
 - Export Lösung als SVG
@@ -36,6 +36,7 @@ PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit gr
 - Export Projektstand als JSON
 - Export/Import persönlicher und gesicherter Wortschatz als JSON
 - Darstellungsoption: schwarze Felder oder Begrenzungslinien
+- Schwarzfeld-Bearbeitungsmodus mit Konsistenzprüfung
 
 ## Bedienlogik persönlicher Wortschatz
 
@@ -77,6 +78,10 @@ Bei GitHub Pages, Netlify oder installierter PWA kann der Service Worker alte Da
 
 Vor dem Löschen von Website-Daten bitte den persönlichen Wortschatz als JSON exportieren.
 
+## Hinweise zum Bearbeitungsmodus
+
+Der Bearbeitungsmodus arbeitet zunächst mit dem Schwarzfeld-Modell. Nicht belegte Felder sind schwarze Sperrfelder, können aber in leere Buchstabenfelder umgewandelt werden. Die spätere Vollraster-Variante mit Begrenzungslinien ohne schwarze Felder bleibt eine eigene Generatorstufe.
+
 ## Hinweis zur nächsten Generatorstufe
 
-v0.6.1 macht den Datenbank-Füllwortschatz deutlich rätseltauglicher. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.
+v0.6.2 ergänzt die manuelle Nachbearbeitung. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.
