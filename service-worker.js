@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'kreuzwortdrucker-v0-6-2';
+const CACHE_NAME = 'kreuzwortdrucker-v0-6-3';
 const ASSETS = [
   './',
   './index.html',

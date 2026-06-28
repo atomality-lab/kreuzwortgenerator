@@ -1,8 +1,8 @@
 'use strict';
 
-const VERSION = '0.6.2';
-const STORAGE_KEY = 'kreuzwortdrucker.v0.6.2.lastState';
-const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.6.1.lastState', 'kreuzwortdrucker.v0.6.0.lastState', 'kreuzwortdrucker.v0.5.3.lastState', 'kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
+const VERSION = '0.6.3';
+const STORAGE_KEY = 'kreuzwortdrucker.v0.6.3.lastState';
+const LEGACY_STORAGE_KEYS = ['kreuzwortdrucker.v0.6.2.lastState', 'kreuzwortdrucker.v0.6.1.lastState', 'kreuzwortdrucker.v0.6.0.lastState', 'kreuzwortdrucker.v0.5.3.lastState', 'kreuzwortdrucker.v0.5.2.lastState', 'kreuzwortdrucker.v0.5.1.lastState', 'kreuzwortdrucker.v0.5.0.lastState', 'kreuzwortdrucker.v0.4.1.lastState', 'kreuzwortdrucker.v0.4.0.lastState', 'kreuzwortdrucker.v0.3.4.lastState', 'kreuzwortdrucker.v0.3.2.lastState', 'kreuzwortdrucker.v0.3.lastState', 'kreuzwortdrucker.v0.2.lastState', 'kreuzwortdrucker.v0.1.lastState'];
 const DB_NAME = 'kreuzwortdrucker-db-v0-3-3';
 const DB_STORE = 'kv';
 
@@ -1507,6 +1507,46 @@ function canPlace(grid, word, row, col, direction, requireCross = true) {
   return { ok: true, crosses };
 }
 
+
+function canPlaceWithBlocked(grid, blockedSet, word, row, col, direction, requireCross = true) {
+  const height = grid.length;
+  const width = grid[0].length;
+  const { dr, dc, pr, pc } = axisDelta(direction);
+  let crosses = 0;
+
+  const beforeRow = row - dr;
+  const beforeCol = col - dc;
+  const afterRow = row + dr * word.length;
+  const afterCol = col + dc * word.length;
+
+  const isBlocked = (r, c) => inside(width, height, r, c) && blockedSet.has(cellKey(r, c));
+
+  if (inside(width, height, beforeRow, beforeCol) && !isBlocked(beforeRow, beforeCol) && getCell(grid, beforeRow, beforeCol)) return { ok: false };
+  if (inside(width, height, afterRow, afterCol) && !isBlocked(afterRow, afterCol) && getCell(grid, afterRow, afterCol)) return { ok: false };
+
+  for (let i = 0; i < word.length; i += 1) {
+    const r = row + dr * i;
+    const c = col + dc * i;
+    if (!inside(width, height, r, c)) return { ok: false };
+    if (blockedSet.has(cellKey(r, c))) return { ok: false };
+
+    const existing = getCell(grid, r, c);
+    if (existing && existing !== word[i]) return { ok: false };
+
+    if (existing === word[i]) {
+      crosses += 1;
+      continue;
+    }
+
+    const sideA = getCell(grid, r - pr, c - pc);
+    const sideB = getCell(grid, r + pr, c + pc);
+    if (sideA || sideB) return { ok: false };
+  }
+
+  if (requireCross && crosses === 0) return { ok: false };
+  return { ok: true, crosses };
+}
+
 function placeWord(grid, wordObj, row, col, direction) {
   const { dr, dc } = axisDelta(direction);
   for (let i = 0; i < wordObj.grid.length; i += 1) {
@@ -1583,6 +1623,35 @@ function findCandidates(grid, wordObj) {
         const row = cell.row - dr * index;
         const col = cell.col - dc * index;
         const result = canPlace(grid, wordObj.grid, row, col, direction, true);
+        if (!result.ok) continue;
+        const score = scoreCandidate(grid, wordObj.grid, row, col, direction, result.crosses);
+        candidates.push({ row, col, direction, score, crosses: result.crosses });
+      }
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score || b.crosses - a.crosses);
+  return candidates;
+}
+
+
+function findCandidatesWithBlocked(grid, blockedSet, wordObj) {
+  const used = getUsedCells(grid);
+  const candidates = [];
+  if (!used.length) return candidates;
+
+  for (const cell of used) {
+    const letterIndexes = [];
+    for (let i = 0; i < wordObj.grid.length; i += 1) {
+      if (wordObj.grid[i] === cell.letter) letterIndexes.push(i);
+    }
+
+    for (const index of letterIndexes) {
+      for (const direction of ['across', 'down']) {
+        const { dr, dc } = axisDelta(direction);
+        const row = cell.row - dr * index;
+        const col = cell.col - dc * index;
+        const result = canPlaceWithBlocked(grid, blockedSet, wordObj.grid, row, col, direction, true);
         if (!result.ok) continue;
         const score = scoreCandidate(grid, wordObj.grid, row, col, direction, result.crosses);
         candidates.push({ row, col, direction, score, crosses: result.crosses });
@@ -1750,6 +1819,7 @@ function generatePuzzle(options) {
     entries: numbered.entries,
     bounds: getBounds(grid),
     openCells: [],
+    blockedCells: [],
     validation: null,
   };
 }
@@ -1782,6 +1852,15 @@ function refreshPuzzleStructureAfterManualEdit() {
   currentPuzzle.bounds = getBounds(currentPuzzle.grid);
   const existingClues = collectCurrentClues();
   currentPuzzle = attachCluesToPuzzle(currentPuzzle, existingClues);
+}
+
+function getBlockedCellSet(puzzle = currentPuzzle) {
+  return new Set(Array.isArray(puzzle && puzzle.blockedCells) ? puzzle.blockedCells : []);
+}
+
+function setBlockedCellSet(puzzle, blockedSet) {
+  if (!puzzle) return;
+  puzzle.blockedCells = Array.from(blockedSet).sort();
 }
 
 function setEditTool(tool) {
@@ -1864,6 +1943,14 @@ function validateManualGrid() {
   const issues = [];
   const errorCells = new Set();
   const seenCompleted = new Map();
+  const longSegmentCells = new Set();
+  const seenSingleCells = new Set();
+
+  segments.forEach((segment) => {
+    if (segment.length > 1) {
+      segment.cells.forEach((cell) => longSegmentCells.add(cellKey(cell.row, cell.col)));
+    }
+  });
 
   const markSegment = (segment) => segment.cells.forEach((cell) => errorCells.add(cellKey(cell.row, cell.col)));
 
@@ -1871,8 +1958,13 @@ function validateManualGrid() {
     const dir = getValidationSegmentLabel(segment.direction);
     const position = `Zeile ${segment.row + 1}, Spalte ${segment.col + 1}`;
     if (segment.length === 1) {
+      const key = cellKey(segment.cells[0].row, segment.cells[0].col);
+      if (longSegmentCells.has(key) || seenSingleCells.has(key)) {
+        return;
+      }
+      seenSingleCells.add(key);
       if (segment.cells[0].letter || segment.hasEmpty) {
-        issues.push(`Einzelfeld ${dir} bei ${position}: zu kurz für ein Rätselwort.`);
+        issues.push(`Einzelfeld bei ${position}: steht isoliert und gehört zu keinem längeren Wort.`);
         markSegment(segment);
       }
       return;
@@ -1957,15 +2049,20 @@ function handleEditCellInput(input) {
   const col = Number.parseInt(input.dataset.col, 10);
   if (!inside(currentPuzzle.grid[0].length, currentPuzzle.grid.length, row, col)) return;
   const openSet = getOpenCellSet(currentPuzzle);
+  const blockedSet = getBlockedCellSet(currentPuzzle);
+  const key = cellKey(row, col);
   const letter = normalizeEditLetter(input.value);
   if (letter) {
     currentPuzzle.grid[row][col] = letter;
-    openSet.delete(cellKey(row, col));
+    openSet.delete(key);
+    blockedSet.delete(key);
   } else {
     currentPuzzle.grid[row][col] = null;
-    openSet.add(cellKey(row, col));
+    openSet.add(key);
+    blockedSet.delete(key);
   }
   setOpenCellSet(currentPuzzle, openSet);
+  setBlockedCellSet(currentPuzzle, blockedSet);
   currentPuzzle.validation = null;
   refreshPuzzleStructureAfterManualEdit();
   saveState();
@@ -1977,17 +2074,22 @@ function handleEditCellInput(input) {
 function toggleEditBlock(row, col) {
   if (!currentPuzzle) return;
   const openSet = getOpenCellSet(currentPuzzle);
+  const blockedSet = getBlockedCellSet(currentPuzzle);
   const key = cellKey(row, col);
   const hasLetter = Boolean(currentPuzzle.grid[row][col]);
   const isOpen = openSet.has(key);
+  const isExplicitBlock = blockedSet.has(key);
   if (hasLetter || isOpen) {
     currentPuzzle.grid[row][col] = null;
     openSet.delete(key);
+    blockedSet.add(key);
   } else {
     currentPuzzle.grid[row][col] = null;
+    blockedSet.delete(key);
     openSet.add(key);
   }
   setOpenCellSet(currentPuzzle, openSet);
+  setBlockedCellSet(currentPuzzle, blockedSet);
   currentPuzzle.validation = null;
   refreshPuzzleStructureAfterManualEdit();
   saveState();
@@ -2246,7 +2348,88 @@ function updateButtons(enabled) {
   });
 }
 
+
+function updatePuzzleStatsAndMessages(messages = []) {
+  if (!currentPuzzle) return;
+  const settings = currentPuzzle.settings || getSettings();
+  const used = getUsedCells(currentPuzzle.grid).length;
+  const placedCount = currentPuzzle.placed.length;
+  const themeUnplacedCount = getThemeUnplacedWords(currentPuzzle).length;
+  els.stats.textContent = `${placedCount} Wörter platziert, ${themeUnplacedCount} Themenwörter nicht platziert, ${used} belegte Felder. Wortarten: ${formatWordTypeCounts(currentPuzzle.placed)}. Ausgabeformat: ${settings.width} × ${settings.height}. Darstellung: ${getGridDisplayLabel(settings.displayMode)}.`;
+  if (messages.length) setMessages(messages);
+}
+
+function fillCurrentPuzzleFromDictionary() {
+  if (!currentPuzzle) return false;
+  const settings = { ...getSettings(), useDictionary: true };
+  if (!hasDictionary() && !getSafeVocabularyEntries(settings).length) {
+    setMessages([{ type: 'error', text: 'Zum Füllen ist kein gesicherter oder Basis-Wortschatz verfügbar.' }]);
+    return true;
+  }
+
+  const existingClues = collectCurrentClues();
+  refreshPuzzleStructureAfterManualEdit();
+  const blockedSet = getBlockedCellSet(currentPuzzle);
+  const openSet = getOpenCellSet(currentPuzzle);
+  const { words, issues } = buildGenerationWords(settings);
+  const existingEntries = new Set(currentPuzzle.entries.map((entry) => entry.value));
+  const existingPlaced = new Set(currentPuzzle.placed.map((word) => word.grid));
+  const alreadyTried = new Set([...existingEntries, ...existingPlaced]);
+  const newlyPlaced = [];
+  const unplaced = [];
+  let placedFillerCount = 0;
+
+  for (const word of words) {
+    const isFiller = word.source === 'dictionary' || word.source === 'safe';
+    if (isFiller && placedFillerCount >= settings.maxFillerWords) continue;
+    if (alreadyTried.has(word.grid)) continue;
+    if (word.grid.length > Math.max(settings.width, settings.height)) {
+      unplaced.push({ ...word, reason: 'länger als Breite und Höhe des Formats' });
+      continue;
+    }
+    const candidates = findCandidatesWithBlocked(currentPuzzle.grid, blockedSet, word);
+    if (!candidates.length) {
+      unplaced.push({ ...word, reason: 'keine passende Kreuzung im bestehenden Entwurf gefunden' });
+      continue;
+    }
+    const best = candidates[0];
+    const placed = placeWord(currentPuzzle.grid, word, best.row, best.col, best.direction);
+    const { dr, dc } = axisDelta(best.direction);
+    for (let i = 0; i < word.grid.length; i += 1) {
+      openSet.delete(cellKey(best.row + dr * i, best.col + dc * i));
+    }
+    newlyPlaced.push(placed);
+    currentPuzzle.placed.push(placed);
+    alreadyTried.add(word.grid);
+    if (isFiller) placedFillerCount += 1;
+  }
+
+  setOpenCellSet(currentPuzzle, openSet);
+  setBlockedCellSet(currentPuzzle, blockedSet);
+  const previousThemeUnplaced = getThemeUnplacedWords(currentPuzzle);
+  currentPuzzle.unplaced = [
+    ...previousThemeUnplaced.filter((word) => !alreadyTried.has(word.grid)),
+    ...unplaced.filter((word) => word.source !== 'dictionary'),
+  ];
+  currentPuzzle.parseIssues = Array.from(new Set([...(currentPuzzle.parseIssues || []), ...issues]));
+  currentPuzzle.settings = settings;
+  currentPuzzle.validation = null;
+  refreshPuzzleStructureAfterManualEdit();
+  currentPuzzle = attachCluesToPuzzle(currentPuzzle, existingClues);
+  updateButtons(Boolean(currentPuzzle.entries.length));
+  saveState();
+  renderPuzzle();
+  updatePuzzleStatsAndMessages([
+    { type: newlyPlaced.length ? 'ok' : 'error', text: newlyPlaced.length ? `Bestehenden Entwurf gefüllt: ${newlyPlaced.length} Wörter wurden ergänzt. Manuelle Buchstaben und gesetzte Schwarzfelder blieben erhalten.` : 'Im bestehenden Entwurf wurden keine passenden Füllwörter gefunden.' },
+  ]);
+  return true;
+}
+
 function createPuzzle(useDictionary = true) {
+  if (useDictionary && currentPuzzle && currentPuzzle.grid && currentPuzzle.grid.length) {
+    fillCurrentPuzzleFromDictionary();
+    return;
+  }
   const settings = { ...getSettings(), useDictionary };
   if (!settings.wordText.trim() && !settings.seedAcross.trim() && !settings.seedDown.trim() && (!useDictionary || !hasDictionary())) {
     setMessages([{ type: 'error', text: useDictionary ? 'Bitte gib Themenwörter ein, trage ein Leitwort ein oder nutze den Basiswortschatz zum Füllen.' : 'Bitte wähle eine persönliche Liste oder trage Themen-/Leitwörter ein.' }]);
@@ -2822,5 +3005,5 @@ renderPersonalDictionaryUi();
 renderSafeVocabularyUi();
 loadDictionaryFromDb().then(() => {
   updateDictionaryUi();
-  setMessages([{ text: 'Bereit für v0.6.2. Neu: Bearbeitungsmodus mit Buchstabenwerkzeug, Schwarzfeld-Werkzeug und Konsistenzprüfung.' }]);
+  setMessages([{ text: 'Bereit für v0.6.3. Neu: Konsistenzprüfung ignoriert reine Kreuzungs-Einzelbuchstaben; Lücken füllen respektiert bearbeitete Raster.' }]);
 });

@@ -1,18 +1,16 @@
-# Kreuzwortdrucker v0.6.2
+# Kreuzwortdrucker v0.6.3
 
 PWA-Prototyp für die Erstellung druckfähiger deutscher Kreuzworträtsel mit großem deutschem Wortfundus, persönlichem Wortschatz, zweistufiger Fülllogik, Fragenverwaltung und SVG-/TXT-/CSV-Export.
 
-## Neu in v0.6.2
+## Neu in v0.6.3
 
-- Neuer Schwarzfeld-Bearbeitungsmodus in der Vorschau.
-- Neue Ansicht **Bearbeiten** neben **Leer** und **Gelöst**.
-- Alle Felder des gewählten Formats werden im Bearbeitungsmodus angezeigt.
-- Schwarze Felder können per Werkzeug **Schwarzfelder setzen/löschen** in leere Buchstabenfelder umgewandelt werden und umgekehrt.
-- Buchstaben können direkt im Raster geändert, ergänzt oder gelöscht werden.
-- Leere Buchstabenfelder werden hellgrau dargestellt.
-- Button **Konsistenz prüfen** prüft den Entwurf und markiert Fehler hellrot.
-- Geprüft werden unter anderem offene Felder, zu kurze Wörter, ausgeschlossene Wörter, unbekannte Wörter und doppelte Wörter.
-- Die Nummerierung, Lösungsliste und Fragenfelder werden nach manuellen Änderungen aktualisiert.
+- Konsistenzprüfung korrigiert: einzelne Kreuzungsbuchstaben werden nicht mehr fälschlich als zu kurze Wörter markiert.
+- Ein einzelnes Feld wird nur noch als Fehler gewertet, wenn es wirklich isoliert steht und zu keinem längeren Wort gehört.
+- **Rätsel erstellen / Lücken füllen** respektiert jetzt einen bestehenden bearbeiteten Entwurf.
+- Manuell gesetzte Buchstaben bleiben beim Füllen erhalten.
+- Explizit gesetzte Schwarzfelder bleiben beim Füllen erhalten.
+- Füllwörter werden nur ergänzt, wenn sie passend an vorhandene Buchstaben kreuzen.
+- Der Bearbeitungsmodus speichert nun explizit gesetzte Schwarzfelder im Projektstand.
 
 ## Bereits enthalten
 
@@ -84,4 +82,4 @@ Der Bearbeitungsmodus arbeitet zunächst mit dem Schwarzfeld-Modell. Nicht beleg
 
 ## Hinweis zur nächsten Generatorstufe
 
-v0.6.2 ergänzt die manuelle Nachbearbeitung. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.
+v0.6.3 repariert den ersten Bearbeitungsmodus. Die nächste größere Generatorstufe sollte die Fülllogik weiter verbessern, z. B. mehrere Füllvorschläge, gezieltes Austauschen einzelner Wörter und später den kompakten Vollraster-Modus mit Begrenzungslinien.
